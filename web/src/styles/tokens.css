@@ -1,0 +1,17 @@
+/* KANINI People First design tokens — locked from prototypes/screens.html */
+:root {
+  --cyan: #23b0e6;
+  --cyan-d: #1c8db8;
+  --cyan-soft: #e3f4fb;
+  --green: #61a229;
+  --green-soft: #e8f3dc;
+  --orange: #e87722;
+  --orange-soft: #fce8d6;
+  --cream: #fdf8f3;
+  --cream-2: #f5efe8;
+  --ink: #292929;
+  --ink-soft: #5c5c5c;
+  --ink-faint: #9a9a9a;
+  --white: #ffffff;
+  --navy: #1a2b3c;
+}

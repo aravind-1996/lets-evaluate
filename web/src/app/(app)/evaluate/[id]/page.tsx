@@ -1,0 +1,78 @@
+import { requireSession } from "@/lib/auth/rbac";
+import { getCandidateDetail } from "@/lib/db/queries";
+import { notFound } from "next/navigation";
+import { EvaluateClient } from "./EvaluateClient";
+import { NewCandidateClient } from "./NewCandidateClient";
+import { db } from "@/lib/db";
+import { roles } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+
+type Params = { params: Promise<{ id: string }> };
+
+export default async function EvaluatePage({ params }: Params) {
+  const session = await requireSession();
+  const { id } = await params;
+
+  if (id === "new") {
+    return (
+      <main className="px-7 py-8">
+        <h1 className="font-serif text-2xl font-bold">New evaluation</h1>
+        <p className="mt-2 text-sm text-[var(--ink-soft)]">
+          Upload a resume and start TA screening.
+        </p>
+        <NewCandidateClient />
+      </main>
+    );
+  }
+
+  const detail = await getCandidateDetail(session.user.organizationId, id);
+  if (!detail) notFound();
+
+  const [roleRow] = detail.candidate.roleId
+    ? await db
+        .select()
+        .from(roles)
+        .where(eq(roles.id, detail.candidate.roleId))
+        .limit(1)
+    : [null];
+
+  const canScreen =
+    (session.user.role === "admin" || session.user.role === "ta") &&
+    !["selected", "rejected", "interview_complete"].includes(
+      detail.candidate.status,
+    );
+
+  const canReview =
+    session.user.role === "interviewer" ||
+    detail.assignments.some(
+      (a) => a.assignment.assignedToId === session.user.id,
+    );
+
+  return (
+    <EvaluateClient
+      candidateId={id}
+      candidateName={detail.candidate.name}
+      role={roleRow?.name ?? "Role"}
+      resumeFilename={detail.candidate.resumeFilename ?? undefined}
+      canScreen={canScreen && !detail.review}
+      canReview={canReview && !!detail.assignments.length}
+      initialMetrics={
+        (detail.screening?.metrics as Metrics | undefined) ?? undefined
+      }
+      initialStandardQuestions={
+        (detail.screening?.standardQuestions as { question?: string }[]) ?? []
+      }
+      initialResumeQuestions={
+        (detail.screening?.resumeQuestions as { question?: string }[]) ?? []
+      }
+      screeningComments={detail.screening?.comments ?? undefined}
+    />
+  );
+}
+
+type Metrics = {
+  tech_match_score?: number;
+  recommendation?: string;
+  strengths?: string[];
+  concerns?: string[];
+};

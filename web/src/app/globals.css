@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@import "../styles/tokens.css";
+
+@theme inline {
+  --font-sans: var(--font-work-sans);
+  --font-serif: var(--font-fraunces);
+  --color-cream: var(--cream);
+  --color-ink: var(--ink);
+}
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-work-sans), system-ui, sans-serif;
+}
+
+.font-serif {
+  font-family: var(--font-fraunces), Georgia, serif;
+}

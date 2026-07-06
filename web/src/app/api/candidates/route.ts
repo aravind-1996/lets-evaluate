@@ -1,0 +1,88 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { candidates } from "@/lib/db/schema";
+import {
+  getActivityFeed,
+  getCandidatesForUser,
+  getUserStats,
+} from "@/lib/db/queries";
+import { apiError, requireApiRole } from "@/lib/api/helpers";
+import { v4 as uuid } from "uuid";
+import { storeResume } from "@/lib/storage/resumes";
+import { extractResumeText } from "@/lib/resume/parse";
+
+export async function GET(req: Request) {
+  const session = await auth();
+  if (!session?.user) return apiError("Unauthorized", 401);
+
+  const { searchParams } = new URL(req.url);
+  const view = searchParams.get("view");
+
+  if (view === "feed") {
+    const feed = await getActivityFeed(session.user.organizationId);
+    return NextResponse.json(feed);
+  }
+
+  if (view === "stats") {
+    const stats = await getUserStats(
+      session.user.organizationId,
+      session.user.id,
+      session.user.role,
+    );
+    return NextResponse.json(stats);
+  }
+
+  const candidates = await getCandidatesForUser(
+    session.user.organizationId,
+    session.user.id,
+    session.user.role,
+  );
+  return NextResponse.json(candidates);
+}
+
+export async function POST(req: Request) {
+  const session = await auth();
+  if (!session?.user) return apiError("Unauthorized", 401);
+  const forbidden = requireApiRole(session.user.role, ["admin", "ta"]);
+  if (forbidden) return forbidden;
+
+  const form = await req.formData();
+  const name = String(form.get("name") ?? "");
+  const email = String(form.get("email") ?? "");
+  const projectId = String(form.get("projectId") ?? "") || null;
+  const roleId = String(form.get("roleId") ?? "") || null;
+  const file = form.get("resume") as File | null;
+
+  if (!name) return apiError("Name required", 400);
+
+  let resumeStorageKey: string | undefined;
+  let resumeFilename = "";
+  let resumeText: string | undefined;
+
+  if (file && file.size > 0) {
+    if (file.size > 10 * 1024 * 1024) {
+      return apiError("Resume must be under 10MB", 400);
+    }
+    const buf = Buffer.from(await file.arrayBuffer());
+    resumeFilename = file.name;
+    resumeStorageKey = await storeResume(buf, file.name);
+    resumeText = await extractResumeText(buf, file.name);
+  }
+
+  const id = uuid();
+  await db.insert(candidates).values({
+    id,
+    organizationId: session.user.organizationId,
+    name,
+    email,
+    projectId,
+    roleId,
+    resumeStorageKey,
+    resumeFilename,
+    status: "draft",
+    createdById: session.user.id,
+  });
+
+  return NextResponse.json({ id, resumeText }, { status: 201 });
+}
