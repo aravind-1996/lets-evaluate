@@ -5,6 +5,20 @@ const MAX_ROLE = 2000;
 const MAX_RESUME_Q = 3000;
 const MAX_NOTES = 2000;
 
+/** Default for questions / notes — fast and cheap */
+function defaultModel() {
+  return process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+}
+
+/** Resume analysis — use a stronger model via OPENAI_ANALYSIS_MODEL */
+function analysisModel() {
+  return (
+    process.env.OPENAI_ANALYSIS_MODEL?.trim() ||
+    process.env.OPENAI_MODEL?.trim() ||
+    "gpt-4o"
+  );
+}
+
 function client() {
   const key = process.env.OPENAI_API_KEY;
   if (!key?.startsWith("sk-")) return null;
@@ -73,8 +87,8 @@ tech_comparison MUST include ALL technologies from Required Tech Stack with stat
 
   try {
     const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.7,
+      model: analysisModel(),
+      temperature: 0.3,
       messages: [{ role: "user", content: prompt }],
     });
     const raw = res.choices[0]?.message?.content ?? "{}";
@@ -142,7 +156,7 @@ export async function generateStandardQuestions(
   const prompt = `Generate ${numQuestions} interview questions for ${roleName}. Tech: ${techStack.join(", ")}${topicLine}. Return JSON array with question, category, expected_answer_hints.`;
 
   const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: defaultModel(),
     temperature: 0.7,
     messages: [{ role: "user", content: prompt }],
   });
@@ -172,7 +186,7 @@ Resume: ${resumeText.slice(0, MAX_RESUME_Q)}
 Requirements: ${roleRequirements.slice(0, MAX_ROLE / 2)}`;
 
   const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: defaultModel(),
     temperature: 0.7,
     messages: [{ role: "user", content: prompt }],
   });
@@ -185,7 +199,7 @@ export async function refineEvaluationNotes(notes: string) {
   const openai = client();
   if (!openai || !notes.trim()) return notes;
   const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: defaultModel(),
     temperature: 0.5,
     messages: [
       {

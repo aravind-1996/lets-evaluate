@@ -5,6 +5,8 @@ const envSchema = z.object({
   AUTH_SECRET: z.string().min(32).optional(),
   AUTH_URL: z.string().url().optional(),
   OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+  OPENAI_ANALYSIS_MODEL: z.string().default("gpt-4o"),
   RESUME_STORAGE_PROVIDER: z.enum(["local", "s3"]).default("local"),
   S3_BUCKET: z.string().optional(),
   S3_REGION: z.string().optional(),
@@ -27,6 +29,11 @@ export function getEnv(): Env {
     AUTH_SECRET: process.env.AUTH_SECRET,
     AUTH_URL: process.env.AUTH_URL,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    OPENAI_MODEL: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+    OPENAI_ANALYSIS_MODEL:
+      process.env.OPENAI_ANALYSIS_MODEL ??
+      process.env.OPENAI_MODEL ??
+      "gpt-4o",
     RESUME_STORAGE_PROVIDER: process.env.RESUME_STORAGE_PROVIDER ?? "local",
     S3_BUCKET: process.env.S3_BUCKET,
     S3_REGION: process.env.S3_REGION,

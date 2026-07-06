@@ -2,14 +2,14 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const publicPaths = ["/", "/login", "/register", "/api/auth"];
+const publicPaths = ["/", "/login", "/register", "/api/auth", "/api/register"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (
     publicPaths.some(
-      (p) => pathname === p || pathname.startsWith("/api/auth"),
+      (p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith("/api/auth"),
     )
   ) {
     return NextResponse.next();

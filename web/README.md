@@ -32,6 +32,8 @@ Open http://localhost:3000
 | `AUTH_SECRET` | Yes | 32+ char random string (`openssl rand -base64 32`) |
 | `AUTH_URL` | Prod | Public app URL (e.g. `https://your-app.vercel.app`) |
 | `OPENAI_API_KEY` | Yes | OpenAI API key |
+| `OPENAI_ANALYSIS_MODEL` | No | Resume screening model (default `gpt-4o` — best quality) |
+| `OPENAI_MODEL` | No | Questions/notes model (default `gpt-4o-mini` — cheaper) |
 | `ORG_SLUG` | No | Default `kanini` |
 | `ORG_NAME` | No | Default `KANINI` |
 | `ALLOWED_EMAIL_DOMAIN` | No | Restrict register/login (e.g. `kanini.com`) |
