@@ -24,8 +24,6 @@ export type StageView = {
   comments: string | null;
 };
 
-const STEPS = ["Setup", "AI Analysis", "Verdict"] as const;
-
 export function EvaluateClient({
   candidateId,
   candidateName,
@@ -58,7 +56,7 @@ export function EvaluateClient({
   myActiveStageId: string | null;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2 | 3>(
+  const [step, setStep] = useState<1 | 2>(
     initialMetrics?.tech_match_score ? 2 : 1,
   );
   const [metrics, setMetrics] = useState<Metrics | undefined>(initialMetrics);
@@ -77,7 +75,7 @@ export function EvaluateClient({
       fetch(`/api/drafts?candidateId=${candidateId}`)
         .then((r) => r.json())
         .then((d) => {
-          if (d?.step) setStep(Math.min(3, d.step as number) as 1 | 2 | 3);
+          if (d?.step) setStep(Math.min(2, d.step as number) as 1 | 2);
           if (d?.data?.comments) setComments(d.data.comments as string);
           if (d?.data?.ratings) setRatings(d.data.ratings as Ratings);
         })
@@ -182,16 +180,71 @@ export function EvaluateClient({
     (s) => s.status === "active" && s.kind !== "screening" && s.kind !== "final",
   );
 
-  const isStepComplete = (n: number) =>
-    n === 1 || n === 2 ? analyzed : false;
-  const maxReachableStep: 1 | 2 | 3 = analyzed ? 3 : 1;
-  const canContinue = step < 3 && isStepComplete(step);
+  // Setup is complete once the profile has been analyzed; AI Analysis is the
+  // last interactive screening step (the verdict is recorded downstream).
+  const isStepComplete = (n: number) => (n === 1 ? analyzed : false);
+  const maxReachableStep: 1 | 2 = analyzed ? 2 : 1;
+  const canContinue = step < 2 && isStepComplete(step);
 
-  function goToStep(n: 1 | 2 | 3) {
+  function goToStep(n: 1 | 2) {
     if (n > maxReachableStep) return;
     setStep(n);
     saveDraft(n);
   }
+
+  // The step bar mirrors the whole journey: the two interactive screening
+  // steps (Setup, AI Analysis) followed by the admin-configured rounds, which
+  // render as read-only progress indicators here.
+  const downstreamStages = stages.filter((s) => s.kind !== "screening");
+  const showStepBar = showWizard || stages.length > 0;
+
+  type StepItem = {
+    key: string;
+    label: string;
+    num: number;
+    state: "on" | "done" | "idle";
+    statusLabel?: string;
+    onClick?: () => void;
+  };
+
+  const stepItems: StepItem[] = [
+    {
+      key: "setup",
+      label: "Setup",
+      num: 1,
+      state: showWizard ? (step === 1 ? "on" : "done") : "done",
+      onClick: showWizard ? () => goToStep(1) : undefined,
+    },
+    {
+      key: "analysis",
+      label: "AI Analysis",
+      num: 2,
+      state: showWizard
+        ? step === 2
+          ? "on"
+          : analyzed
+            ? "done"
+            : "idle"
+        : "done",
+      onClick: showWizard && analyzed ? () => goToStep(2) : undefined,
+    },
+    ...downstreamStages.map((s, i) => {
+      const meta = stageStatusMeta(s.status);
+      const state: StepItem["state"] =
+        s.status === "passed"
+          ? "done"
+          : s.status === "active"
+            ? "on"
+            : "idle";
+      return {
+        key: s.id,
+        label: s.label,
+        num: i + 3,
+        state,
+        statusLabel: meta.label,
+      };
+    }),
+  ];
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
@@ -215,30 +268,46 @@ export function EvaluateClient({
         )}
       </div>
 
-      {showWizard && (
-        <div className="flex border-b border-[var(--cream-2)]">
-          {STEPS.map((label, i) => {
-            const n = (i + 1) as 1 | 2 | 3;
-            const done = isStepComplete(n) && step !== n;
-            const state = step === n ? "on" : done ? "done" : "idle";
-            const reachable = n <= maxReachableStep;
-            return (
-              <button
-                key={label}
-                type="button"
-                onClick={() => goToStep(n)}
-                disabled={!reachable}
-                aria-current={step === n ? "step" : undefined}
-                title={reachable ? `Go to ${label}` : "Complete the previous step first"}
-                className={cn(
-                  "eval-step",
-                  state === "done" && "done",
-                  state === "on" && "on",
+      {showStepBar && (
+        <div className="flex flex-wrap border-b border-[var(--cream-2)]">
+          {stepItems.map((it) => {
+            const inner = (
+              <>
+                <span className="num">
+                  {it.state === "done" ? "✓" : it.num}
+                </span>
+                {it.label}
+                {it.statusLabel && (
+                  <span className="mt-1 block text-[9px] font-semibold normal-case tracking-normal opacity-70">
+                    {it.statusLabel}
+                  </span>
                 )}
+              </>
+            );
+            const className = cn(
+              "eval-step",
+              it.state === "done" && "done",
+              it.state === "on" && "on",
+            );
+            return it.onClick ? (
+              <button
+                key={it.key}
+                type="button"
+                onClick={it.onClick}
+                aria-current={it.state === "on" ? "step" : undefined}
+                title={`Go to ${it.label}`}
+                className={className}
               >
-                <span className="num">{done ? "✓" : n}</span>
-                {label}
+                {inner}
               </button>
+            ) : (
+              <div
+                key={it.key}
+                aria-current={it.state === "on" ? "step" : undefined}
+                className={cn(className, "cursor-default")}
+              >
+                {inner}
+              </div>
             );
           })}
         </div>
@@ -287,8 +356,6 @@ export function EvaluateClient({
               </Pill>
             )}
           </div>
-
-          {stages.length > 0 && <StagePipeline stages={stages} />}
 
           {/* Context actions for the current pipeline position (non-screening). */}
           {!showWizard && myActiveStage && (
@@ -498,65 +565,45 @@ export function EvaluateClient({
                     }}
                   />
                   <div className="case-card p-5">
-                    <Button onClick={() => goToStep(3)} disabled={loading}>
-                      Continue to verdict →
-                    </Button>
+                    <h2 className="font-serif text-xl font-bold">
+                      Proceed to interviews
+                    </h2>
+                    <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
+                      The AI analysis above is advisory. Choosing{" "}
+                      <strong>Proceed</strong> moves the candidate into the
+                      interview rounds and opens the scheduling calendar. The
+                      final verdict is recorded at{" "}
+                      <strong>Final Confirmation</strong>, after all rounds are
+                      complete.
+                    </p>
+                    <FieldTextarea
+                      className="mt-4"
+                      placeholder="Screening notes…"
+                      value={comments}
+                      onChange={(e) => setComments(e.target.value)}
+                    />
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button onClick={() => decide("proceed")} disabled={loading}>
+                        {loading ? "Saving…" : "Proceed to scheduling →"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => decide("hold")}
+                        disabled={loading}
+                      >
+                        Hold
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => decide("reject")}
+                        disabled={loading}
+                      >
+                        Reject
+                      </Button>
+                    </div>
                   </div>
                 </>
               )}
-            </section>
-          )}
-
-          {showWizard && step === 3 && (
-            <section className="case-card p-5 case-fade-in">
-              <h2 className="font-serif text-xl font-bold">Record verdict</h2>
-              {metrics && (metrics.recommendation || metrics.suitability?.verdict) && (
-                <div className="mt-3 rounded-xl border border-[var(--cream-2)] bg-[var(--cream)] p-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="case-label">AI advisory</span>
-                    {metrics.suitability?.verdict && (
-                      <Pill variant={suitabilityVariant(metrics.suitability.verdict)}>
-                        {metrics.suitability.verdict}
-                      </Pill>
-                    )}
-                    {metrics.recommendation && (
-                      <Pill variant={recommendationVariant(metrics.recommendation)}>
-                        {metrics.recommendation}
-                      </Pill>
-                    )}
-                    {score != null && (
-                      <span className="text-xs text-[var(--ink-faint)]">
-                        Tech match {score}%
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-2 text-xs text-[var(--ink-faint)]">
-                    The AI recommendation is advisory. You decide whether to
-                    proceed.
-                  </p>
-                </div>
-              )}
-              <FieldTextarea
-                className="mt-4"
-                placeholder="Your screening notes…"
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-              />
-              <p className="mt-3 text-xs text-[var(--ink-faint)]">
-                Choosing <strong>Proceed</strong> takes you to the interviewer
-                scheduling calendar to assign a panel member and book a slot.
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={() => decide("proceed")} disabled={loading}>
-                  {loading ? "Saving…" : "Proceed to scheduling →"}
-                </Button>
-                <Button variant="ghost" onClick={() => decide("hold")} disabled={loading}>
-                  Hold
-                </Button>
-                <Button variant="ghost" onClick={() => decide("reject")} disabled={loading}>
-                  Reject
-                </Button>
-              </div>
             </section>
           )}
 
@@ -600,14 +647,14 @@ export function EvaluateClient({
             className="px-4 py-2 text-sm"
             onClick={() => {
               if (step === 1) router.back();
-              else goToStep((step - 1) as 1 | 2 | 3);
+              else goToStep((step - 1) as 1 | 2);
             }}
           >
             ← Back
           </Button>
           <Button
             className="px-4 py-2 text-sm"
-            onClick={() => goToStep(Math.min(3, step + 1) as 1 | 2 | 3)}
+            onClick={() => goToStep(Math.min(2, step + 1) as 1 | 2)}
             disabled={!canContinue}
             title={
               canContinue
@@ -636,62 +683,6 @@ function stageStatusMeta(status: StageView["status"]): {
   if (status === "active") return { variant: "cyan", label: "In progress" };
   if (status === "skipped") return { variant: "neutral", label: "Skipped" };
   return { variant: "neutral", label: "Pending" };
-}
-
-function StagePipeline({ stages }: { stages: StageView[] }) {
-  return (
-    <div className="case-card mb-4 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="case-label">Interview process</span>
-      </div>
-      <ol className="flex flex-wrap gap-2">
-        {stages.map((s, i) => {
-          const meta = stageStatusMeta(s.status);
-          return (
-            <li
-              key={s.id}
-              className={cn(
-                "flex min-w-[150px] flex-1 flex-col gap-1 rounded-xl border p-3",
-                s.status === "active"
-                  ? "border-[var(--cyan)] bg-[var(--cyan-soft)]"
-                  : "border-[var(--cream-2)] bg-[var(--cream)]",
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold",
-                    s.status === "passed"
-                      ? "bg-[var(--green)] text-white"
-                      : s.status === "failed"
-                        ? "bg-[var(--orange)] text-white"
-                        : "bg-[var(--ink)] text-white",
-                  )}
-                >
-                  {s.status === "passed" ? "✓" : s.status === "failed" ? "✕" : i + 1}
-                </span>
-                <span className="truncate text-[13px] font-bold">{s.label}</span>
-              </div>
-              <Pill variant={meta.variant} className="w-fit text-[10px]">
-                {meta.label}
-              </Pill>
-              {s.assigneeName && (
-                <span className="truncate text-[11px] text-[var(--ink-faint)]">
-                  {s.assigneeName}
-                  {s.dueAt
-                    ? ` · ${new Date(s.dueAt).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                      })}`
-                    : ""}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
 }
 
 /* ─────────────────────────── Assignee decision ─────────────────────────── */
