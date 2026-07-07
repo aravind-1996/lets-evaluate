@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/Button";
-import { CabinetPage, CaseCard } from "@/components/CabinetPage";
-import { FieldInput, FieldSelect } from "@/components/FormField";
+import { CaseCard } from "@/components/CabinetPage";
+import { FieldInput, FieldLabel, FieldSelect } from "@/components/FormField";
 
 type Project = { id: string; name: string };
 type Role = { id: string; name: string; projectId: string | null };
@@ -59,46 +59,81 @@ export function NewCandidateClient() {
         <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
           Candidate details and resume evidence
         </p>
-        <div className="mt-5 space-y-3">
-          <FieldInput
-            required
-            placeholder="Candidate name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <FieldInput
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <FieldSelect
-            value={projectId}
-            onChange={(e) => {
-              setProjectId(e.target.value);
-              setRoleId("");
-            }}
-          >
-            <option value="">Select project (optional)</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </FieldSelect>
-          <FieldSelect value={roleId} onChange={(e) => setRoleId(e.target.value)}>
-            <option value="">Select role (optional)</option>
-            {roles.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </FieldSelect>
-          <input
-            type="file"
-            accept=".pdf,.docx"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="w-full text-sm"
-          />
+        <div className="mt-5 space-y-4">
+          <div>
+            <FieldLabel htmlFor="candidate-name">Candidate name</FieldLabel>
+            <FieldInput
+              id="candidate-name"
+              required
+              placeholder="e.g. Jordan Rivera"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div>
+            <FieldLabel htmlFor="candidate-email">Email</FieldLabel>
+            <FieldInput
+              id="candidate-email"
+              type="email"
+              placeholder="name@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div>
+            <FieldLabel htmlFor="candidate-project">Project</FieldLabel>
+            <FieldSelect
+              id="candidate-project"
+              value={projectId}
+              onChange={(e) => {
+                setProjectId(e.target.value);
+                setRoleId("");
+              }}
+            >
+              <option value="">Select project (optional)</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </FieldSelect>
+          </div>
+          <div>
+            <FieldLabel htmlFor="candidate-role">Role</FieldLabel>
+            <FieldSelect
+              id="candidate-role"
+              value={roleId}
+              onChange={(e) => setRoleId(e.target.value)}
+            >
+              <option value="">Select role (optional)</option>
+              {roles.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </FieldSelect>
+          </div>
+          <div>
+            <FieldLabel>Resume</FieldLabel>
+            <label
+              htmlFor="candidate-resume"
+              className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed border-[var(--cream-2)] bg-[var(--cream)] px-4 py-3 text-sm transition-colors hover:border-[var(--cyan)]"
+            >
+              <span className="min-w-0 truncate text-[var(--ink-soft)]">
+                {file ? file.name : "Upload a PDF or DOCX resume"}
+              </span>
+              <span className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-[var(--cyan-d)] shadow-sm">
+                {file ? "Change" : "Browse"}
+              </span>
+            </label>
+            <input
+              id="candidate-resume"
+              type="file"
+              accept=".pdf,.docx"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="sr-only"
+            />
+          </div>
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? "Opening…" : "Open case file →"}
           </Button>

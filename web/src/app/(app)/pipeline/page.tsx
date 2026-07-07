@@ -24,8 +24,13 @@ export default async function PipelinePage() {
     },
   ];
 
+  const subtitle =
+    session.user.role === "admin"
+      ? "Full visibility across the team"
+      : "Your candidates";
+
   return (
-    <CabinetPage title="Team pipeline" subtitle="Full visibility for the TA team">
+    <CabinetPage title="Team pipeline" subtitle={subtitle}>
       <div className="grid gap-4 md:grid-cols-4">
         {columns.map((col) => (
           <CaseCard key={col.key} className="p-4">

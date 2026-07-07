@@ -1,7 +1,7 @@
 import type { MemberRole } from "@/lib/auth/config";
 
 export function canViewAllCandidates(role: MemberRole) {
-  return role === "admin" || role === "ta";
+  return role === "admin";
 }
 
 export function canAssignInterviewers(role: MemberRole) {
@@ -9,7 +9,7 @@ export function canAssignInterviewers(role: MemberRole) {
 }
 
 export function canManageSetup(role: MemberRole) {
-  return role === "admin" || role === "ta";
+  return role === "admin";
 }
 
 export function isTeamLead(role: MemberRole) {

@@ -35,6 +35,52 @@ export async function getOrgRoles(organizationId: string, projectId?: string) {
   );
 }
 
+export type RoleCandidateStats = {
+  total: number;
+  selected: number;
+  rejected: number;
+  hold: number;
+  inProgress: number;
+};
+
+const emptyRoleStats = (): RoleCandidateStats => ({
+  total: 0,
+  selected: 0,
+  rejected: 0,
+  hold: 0,
+  inProgress: 0,
+});
+
+/**
+ * Candidate counts bucketed per role for the openings dashboard.
+ * Returns a map keyed by roleId. Candidates with no role are ignored.
+ */
+export async function getRoleCandidateStats(
+  organizationId: string,
+): Promise<Record<string, RoleCandidateStats>> {
+  const rows = await db
+    .select({ roleId: candidates.roleId, status: candidates.status })
+    .from(candidates)
+    .where(eq(candidates.organizationId, organizationId));
+
+  const byRole: Record<string, RoleCandidateStats> = {};
+  for (const row of rows) {
+    if (!row.roleId) continue;
+    const stats = (byRole[row.roleId] ??= emptyRoleStats());
+    stats.total += 1;
+    if (row.status === "selected") {
+      stats.selected += 1;
+    } else if (row.status === "rejected" || row.status === "screened_rejected") {
+      stats.rejected += 1;
+    } else if (row.status === "hold" || row.status === "screened_hold") {
+      stats.hold += 1;
+    } else {
+      stats.inProgress += 1;
+    }
+  }
+  return byRole;
+}
+
 export async function getOrgQuestions(
   organizationId: string,
   roleId?: string,
@@ -57,11 +103,24 @@ export async function getCandidatesForUser(
   userId: string,
   role: MemberRole,
 ) {
-  if (role === "admin" || role === "ta") {
+  if (role === "admin") {
     return db
       .select()
       .from(candidates)
       .where(eq(candidates.organizationId, organizationId))
+      .orderBy(desc(candidates.updatedAt));
+  }
+
+  if (role === "ta") {
+    return db
+      .select()
+      .from(candidates)
+      .where(
+        and(
+          eq(candidates.organizationId, organizationId),
+          eq(candidates.createdById, userId),
+        ),
+      )
       .orderBy(desc(candidates.updatedAt));
   }
 
@@ -88,6 +147,107 @@ export async function getCandidatesForUser(
       ),
     )
     .orderBy(desc(candidates.updatedAt));
+}
+
+export type CandidateGridRow = {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+  projectId: string | null;
+  roleId: string | null;
+  projectName: string | null;
+  roleName: string | null;
+  roleLevel: string | null;
+  resumeFilename: string | null;
+  hasResume: boolean;
+  techScore: number | null;
+  screeningDecision: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Candidate rows enriched with project / role names and screening score for the
+ * recruiter grid. Applies the same RBAC scoping as getCandidatesForUser:
+ * admins see the whole org, TAs see their own candidates, interviewers see assigned.
+ */
+export async function getCandidatesGridForUser(
+  organizationId: string,
+  userId: string,
+  role: MemberRole,
+): Promise<CandidateGridRow[]> {
+  const columns = {
+    id: candidates.id,
+    name: candidates.name,
+    email: candidates.email,
+    status: candidates.status,
+    projectId: candidates.projectId,
+    roleId: candidates.roleId,
+    projectName: projects.name,
+    roleName: roles.name,
+    roleLevel: roles.level,
+    resumeFilename: candidates.resumeFilename,
+    resumeStorageKey: candidates.resumeStorageKey,
+    metrics: screenings.metrics,
+    screeningDecision: screenings.decision,
+    createdAt: candidates.createdAt,
+    updatedAt: candidates.updatedAt,
+  };
+
+  let condition = eq(candidates.organizationId, organizationId);
+
+  if (role === "ta") {
+    condition = and(condition, eq(candidates.createdById, userId))!;
+  } else if (role !== "admin") {
+    const assignedIds = await db
+      .select({ candidateId: interviewAssignments.candidateId })
+      .from(interviewAssignments)
+      .where(
+        and(
+          eq(interviewAssignments.organizationId, organizationId),
+          eq(interviewAssignments.assignedToId, userId),
+        ),
+      );
+    const ids = assignedIds.map((a) => a.candidateId);
+    if (!ids.length) return [];
+    condition = and(condition, inArray(candidates.id, ids))!;
+  }
+
+  const rows = await db
+    .select(columns)
+    .from(candidates)
+    .leftJoin(projects, eq(candidates.projectId, projects.id))
+    .leftJoin(roles, eq(candidates.roleId, roles.id))
+    .leftJoin(screenings, eq(screenings.candidateId, candidates.id))
+    .where(condition)
+    .orderBy(desc(candidates.updatedAt));
+
+  return rows.map((r) => {
+    const rawScore = (r.metrics as Record<string, unknown> | null)
+      ?.tech_match_score;
+    const techScore =
+      typeof rawScore === "number" && Number.isFinite(rawScore)
+        ? Math.round(rawScore)
+        : null;
+    return {
+      id: r.id,
+      name: r.name,
+      email: r.email ?? "",
+      status: r.status,
+      projectId: r.projectId,
+      roleId: r.roleId,
+      projectName: r.projectName ?? null,
+      roleName: r.roleName ?? null,
+      roleLevel: r.roleLevel ?? null,
+      resumeFilename: r.resumeFilename ?? null,
+      hasResume: Boolean(r.resumeStorageKey),
+      techScore,
+      screeningDecision: r.screeningDecision ?? null,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+    };
+  });
 }
 
 export async function getCandidateDetail(
@@ -207,15 +367,16 @@ export async function getUserStats(
   const all = await db.select().from(candidates).where(base);
 
   const mine = all.filter((c) => c.createdById === userId);
+  const scoped = role === "admin" ? all : mine;
   const terminal = (list: typeof all, status: string) =>
     list.filter((c) => c.status === status).length;
 
   return {
-    total: role === "admin" || role === "ta" ? all.length : mine.length,
-    selected: terminal(role === "admin" || role === "ta" ? all : mine, "selected"),
-    rejected: terminal(role === "admin" || role === "ta" ? all : mine, "rejected"),
-    hold: terminal(role === "admin" || role === "ta" ? all : mine, "hold"),
-    inProgress: all.filter((c) =>
+    total: scoped.length,
+    selected: terminal(scoped, "selected"),
+    rejected: terminal(scoped, "rejected"),
+    hold: terminal(scoped, "hold"),
+    inProgress: scoped.filter((c) =>
       ["screening", "assigned", "interview_in_progress", "ready_for_interview"].includes(
         c.status,
       ),

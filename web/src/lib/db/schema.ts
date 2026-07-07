@@ -50,6 +50,8 @@ export const assignmentStatusEnum = pgEnum("assignment_status", [
   "cancelled",
 ]);
 
+export const roleStatusEnum = pgEnum("role_status", ["open", "closed"]);
+
 export const organizations = pgTable("organizations", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -126,7 +128,12 @@ export const roles = pgTable(
     level: text("level").default(""),
     requirements: text("requirements").default(""),
     projectIds: jsonb("project_ids").$type<string[]>().default([]),
+    status: roleStatusEnum("status").notNull().default("open"),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },

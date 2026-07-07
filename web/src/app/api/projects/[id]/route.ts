@@ -16,7 +16,7 @@ const updateSchema = z.object({
 export async function PUT(req: Request, { params }: Params) {
   const session = await auth();
   if (!session?.user) return apiError("Unauthorized", 401);
-  const forbidden = requireApiRole(session.user.role, ["admin", "ta"]);
+  const forbidden = requireApiRole(session.user.role, ["admin"]);
   if (forbidden) return forbidden;
 
   const { id } = await params;
@@ -38,7 +38,7 @@ export async function PUT(req: Request, { params }: Params) {
 export async function DELETE(_req: Request, { params }: Params) {
   const session = await auth();
   if (!session?.user) return apiError("Unauthorized", 401);
-  const forbidden = requireApiRole(session.user.role, ["admin", "ta"]);
+  const forbidden = requireApiRole(session.user.role, ["admin"]);
   if (forbidden) return forbidden;
 
   const { id } = await params;

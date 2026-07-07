@@ -6,8 +6,8 @@ import { useSyncExternalStore } from "react";
 import { Logo, LogoMark } from "@/components/Logo";
 import { FaceAvatar } from "@/components/FaceAvatar";
 import { LogoutButton } from "@/components/LogoutButton";
-import { canManageSetup } from "@/lib/auth/capabilities";
 import type { MemberRole } from "@/lib/auth/config";
+import { getRoleDisplayName } from "@/lib/auth/validation";
 import { cn } from "@/lib/utils";
 import {
   DashboardIcon,
@@ -34,12 +34,35 @@ type NavItem = {
 type NavSection = { label?: string; items: NavItem[] };
 
 function navForRole(role: MemberRole): NavSection[] {
-  if (!canManageSetup(role)) {
+  if (role === "interviewer") {
     return [
       {
         items: [
           { href: "/people", label: "Dashboard", icon: DashboardIcon },
           { href: "/assignments", label: "My Assignments", icon: AssignmentsIcon },
+          { href: "/archive", label: "Archives", icon: ArchivesIcon },
+        ],
+      },
+    ];
+  }
+
+  if (role === "ta") {
+    return [
+      {
+        items: [{ href: "/people", label: "Dashboard", icon: DashboardIcon }],
+      },
+      {
+        label: "Talent",
+        items: [
+          { href: "/candidates", label: "Candidates", icon: CandidatesIcon },
+          { href: "/interviewers", label: "Interviewers", icon: InterviewersIcon },
+          { href: "/booking", label: "Booking", icon: BookingIcon },
+        ],
+      },
+      {
+        label: "Records",
+        items: [
+          { href: "/pipeline", label: "Pipeline", icon: PipelineIcon },
           { href: "/archive", label: "Archives", icon: ArchivesIcon },
         ],
       },
@@ -77,15 +100,7 @@ function navForRole(role: MemberRole): NavSection[] {
 }
 
 function mobileNavForRole(role: MemberRole) {
-  const items = [
-    { href: "/people", label: "Home" },
-    { href: "/candidates", label: "People" },
-    { href: "/evaluate/new", label: "+", accent: true as const },
-    { href: "/booking", label: "Booking" },
-    { href: "/archive", label: "Archive" },
-  ];
-
-  if (!canManageSetup(role)) {
+  if (role === "interviewer") {
     return [
       { href: "/people", label: "Home" },
       { href: "/assignments", label: "Assign" },
@@ -94,7 +109,13 @@ function mobileNavForRole(role: MemberRole) {
     ];
   }
 
-  return items;
+  return [
+    { href: "/people", label: "Home" },
+    { href: "/candidates", label: "People" },
+    { href: "/evaluate/new", label: "+", accent: true as const },
+    { href: "/booking", label: "Booking" },
+    { href: "/archive", label: "Archive" },
+  ];
 }
 
 const STORAGE_KEY = "sidebar:collapsed";
@@ -154,8 +175,8 @@ export function CabinetShell({
     <div className="min-h-screen bg-[var(--cream)] pb-20 md:h-screen md:overflow-hidden md:pb-6 md:pt-6">
       <div
         className={cn(
-          "case-cabinet mx-auto flex min-h-[calc(100vh-3rem)] max-w-[1180px] flex-col md:mx-6 md:h-[calc(100vh-3rem)] md:min-h-0 md:flex-row md:items-stretch",
-          isEvaluateFocus && "max-w-[1100px]",
+          "case-cabinet mx-auto flex min-h-[calc(100vh-3rem)] flex-col md:mx-6 md:h-[calc(100vh-3rem)] md:min-h-0 md:flex-row md:items-stretch",
+          isEvaluateFocus && "md:mx-auto md:max-w-[1100px]",
         )}
       >
         <aside
@@ -262,9 +283,17 @@ export function CabinetShell({
           >
             {collapsed ? (
               <>
-                <span title={userName}>
+                <Link
+                  href="/profile"
+                  title={userName}
+                  aria-label="Profile"
+                  className={cn(
+                    "grid place-items-center rounded-full transition-shadow hover:ring-2 hover:ring-[var(--cyan)]",
+                    pathname === "/profile" && "ring-2 ring-[var(--cyan)]",
+                  )}
+                >
                   <FaceAvatar name={userName} size="sm" />
-                </span>
+                </Link>
                 <LogoutButton
                   compact
                   className="grid size-9 place-items-center rounded-lg p-0"
@@ -272,15 +301,21 @@ export function CabinetShell({
               </>
             ) : (
               <>
-                <div className="mb-2 flex items-center gap-2.5 rounded-lg px-1 py-1">
+                <Link
+                  href="/profile"
+                  className={cn(
+                    "mb-2 flex items-center gap-2.5 rounded-lg px-1 py-1 transition-colors hover:bg-white/60",
+                    pathname === "/profile" && "bg-white",
+                  )}
+                >
                   <FaceAvatar name={userName} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-bold">{userName}</div>
-                    <div className="truncate text-[11px] capitalize text-[var(--ink-faint)]">
-                      {userRole.replace(/_/g, " ")}
+                    <div className="truncate text-[11px] text-[var(--ink-faint)]">
+                      {getRoleDisplayName(userRole)}
                     </div>
                   </div>
-                </div>
+                </Link>
                 <LogoutButton />
               </>
             )}
@@ -289,15 +324,15 @@ export function CabinetShell({
 
         <div className="flex min-w-0 flex-1 flex-col bg-white md:h-full md:min-h-0 md:overflow-y-auto md:rounded-r-xl">
           <div className="flex items-center justify-between border-b border-[var(--cream-2)] px-4 py-3 md:hidden">
-            <div className="flex min-w-0 items-center gap-2">
+            <Link href="/profile" className="flex min-w-0 items-center gap-2">
               <FaceAvatar name={userName} size="sm" />
               <div className="min-w-0">
                 <div className="truncate text-[13px] font-bold">{userName}</div>
-                <div className="truncate text-[11px] capitalize text-[var(--ink-faint)]">
-                  {userRole.replace(/_/g, " ")}
+                <div className="truncate text-[11px] text-[var(--ink-faint)]">
+                  {getRoleDisplayName(userRole)}
                 </div>
               </div>
-            </div>
+            </Link>
             <LogoutButton className="!w-auto shrink-0 rounded-full px-3 py-1.5 text-[11px]" />
           </div>
           {children}

@@ -260,3 +260,46 @@ export async function PUT(req: Request, { params }: Params) {
 
   return NextResponse.json({ id: newId, resumeText }, { status: 201 });
 }
+
+export async function DELETE(_req: Request, { params }: Params) {
+  const session = await auth();
+  if (!session?.user) return apiError("Unauthorized", 401);
+  const forbidden = requireApiRole(session.user.role, ["admin", "ta"]);
+  if (forbidden) return forbidden;
+
+  const { id } = await params;
+
+  const [existing] = await db
+    .select()
+    .from(candidates)
+    .where(
+      and(
+        eq(candidates.id, id),
+        eq(candidates.organizationId, session.user.organizationId),
+      ),
+    )
+    .limit(1);
+
+  if (!existing) return apiError("Not found", 404);
+
+  // Related screenings, assignments, reviews and drafts cascade on delete.
+  await db
+    .delete(candidates)
+    .where(
+      and(
+        eq(candidates.id, id),
+        eq(candidates.organizationId, session.user.organizationId),
+      ),
+    );
+
+  await logEvent({
+    organizationId: session.user.organizationId,
+    actorId: session.user.id,
+    entityType: "candidate",
+    entityId: id,
+    action: "candidate.deleted",
+    payload: { name: existing.name },
+  });
+
+  return NextResponse.json({ ok: true });
+}

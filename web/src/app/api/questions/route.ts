@@ -27,7 +27,7 @@ const schema = z.object({
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return apiError("Unauthorized", 401);
-  const forbidden = requireApiRole(session.user.role, ["admin", "ta"]);
+  const forbidden = requireApiRole(session.user.role, ["admin"]);
   if (forbidden) return forbidden;
 
   const body = schema.parse(await req.json());
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const session = await auth();
   if (!session?.user) return apiError("Unauthorized", 401);
-  const forbidden = requireApiRole(session.user.role, ["admin", "ta"]);
+  const forbidden = requireApiRole(session.user.role, ["admin"]);
   if (forbidden) return forbidden;
 
   const { searchParams } = new URL(req.url);

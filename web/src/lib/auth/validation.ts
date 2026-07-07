@@ -104,6 +104,33 @@ export const loginBodySchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+export const changePasswordBodySchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required"),
+    newPassword: z.string().min(1, "New password is required"),
+    confirmPassword: z.string().min(1, "Please confirm your new password"),
+  })
+  .superRefine((data, ctx) => {
+    const passwordError = validatePassword(data.newPassword);
+    if (passwordError) {
+      ctx.addIssue({ code: "custom", message: passwordError, path: ["newPassword"] });
+    }
+    if (data.newPassword !== data.confirmPassword) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Passwords do not match",
+        path: ["confirmPassword"],
+      });
+    }
+    if (data.currentPassword && data.newPassword === data.currentPassword) {
+      ctx.addIssue({
+        code: "custom",
+        message: "New password must be different from the current password",
+        path: ["newPassword"],
+      });
+    }
+  });
+
 /** Turn Zod errors into a single user-friendly string for API responses. */
 export function formatZodError(error: z.ZodError): string {
   const first = error.issues[0];
@@ -115,6 +142,11 @@ export const ROLE_LABELS: Record<MemberRole, string> = {
   ta: "Talent Acquisition — screen & assign candidates",
   interviewer: "Interviewer — conduct assigned interviews",
 };
+
+/** Short role title for profile chrome (e.g. sidebar). */
+export function getRoleDisplayName(role: MemberRole): string {
+  return ROLE_LABELS[role].split(" — ")[0] ?? role;
+}
 
 /** Normalize login credentials (username or full email) for NextAuth authorize. */
 export function normalizeLoginCredentials(input: {

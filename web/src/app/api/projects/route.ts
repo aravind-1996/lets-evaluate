@@ -6,7 +6,6 @@ import { getOrgProjects } from "@/lib/db/queries";
 import { eq, and } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
-import { canManageSetup } from "@/lib/auth/rbac";
 import { apiError, requireApiRole } from "@/lib/api/helpers";
 
 export async function GET() {
@@ -25,7 +24,7 @@ const createSchema = z.object({
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return apiError("Unauthorized", 401);
-  const forbidden = requireApiRole(session.user.role, ["admin", "ta"]);
+  const forbidden = requireApiRole(session.user.role, ["admin"]);
   if (forbidden) return forbidden;
 
   const body = createSchema.parse(await req.json());

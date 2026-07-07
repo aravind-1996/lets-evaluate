@@ -69,11 +69,26 @@ export function LogoutButton({
       onClick={handleLogout}
       disabled={loading}
       className={cn(
-        "w-full rounded-lg px-3 py-2 text-left text-[12px] font-semibold text-[var(--ink-soft)] transition-colors hover:bg-white hover:text-red-600 disabled:opacity-50",
+        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] font-semibold text-[var(--ink-soft)] transition-colors hover:bg-white hover:text-red-600 disabled:opacity-50",
         className,
       )}
     >
-      {loading ? "Signing out…" : "Sign out"}
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="shrink-0"
+        aria-hidden
+      >
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <path d="M16 17l5-5-5-5M21 12H9" />
+      </svg>
+      <span>{loading ? "Signing out…" : "Sign out"}</span>
     </button>
   );
 }

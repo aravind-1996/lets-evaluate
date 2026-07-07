@@ -32,7 +32,7 @@ function normalizeProjectIds(body: z.infer<typeof schema>): string[] {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return apiError("Unauthorized", 401);
-  const forbidden = requireApiRole(session.user.role, ["admin", "ta"]);
+  const forbidden = requireApiRole(session.user.role, ["admin"]);
   if (forbidden) return forbidden;
 
   const body = schema.parse(await req.json());
