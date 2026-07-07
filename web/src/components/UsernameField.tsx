@@ -29,7 +29,7 @@ export function UsernameField({
           autoComplete={autoComplete}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="firstname.lastname"
+          placeholder="e.g. nuthan or nuthan.m"
           aria-invalid={!!error}
           aria-describedby={`${id}-domain ${error ? `${id}-error` : ""}`}
           className={cn(error && "border-red-400 focus:border-red-500")}
