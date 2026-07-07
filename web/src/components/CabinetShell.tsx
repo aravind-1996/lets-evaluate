@@ -223,7 +223,7 @@ export function CabinetShell({
           )}
 
           <nav
-            className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2"
+            className="flex flex-1 flex-col gap-1 overflow-hidden px-2 py-2"
             aria-label="App navigation"
           >
             {sections.map((section, si) => (
