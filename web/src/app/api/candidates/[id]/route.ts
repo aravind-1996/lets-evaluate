@@ -8,6 +8,7 @@ import { z } from "zod";
 import { storeResume } from "@/lib/storage/resumes";
 import { extractResumeText } from "@/lib/resume/parse";
 import {
+  ANALYSIS_MODEL,
   analyzeResume,
   generateResumeQuestions,
   generateStandardQuestions,
@@ -118,7 +119,7 @@ export async function POST(req: Request, { params }: Params) {
       payload: { score: metrics.tech_match_score },
     });
 
-    return NextResponse.json({ metrics });
+    return NextResponse.json({ metrics, model: ANALYSIS_MODEL });
   }
 
   if (body.action === "questions") {
@@ -213,7 +214,11 @@ export async function PUT(req: Request, { params }: Params) {
     }
     const buf = Buffer.from(await file.arrayBuffer());
     resumeFilename = file.name;
-    resumeStorageKey = await storeResume(buf, file.name);
+    try {
+      resumeStorageKey = await storeResume(buf, file.name);
+    } catch (err) {
+      console.error("Resume storage failed", err);
+    }
     resumeText = await extractResumeText(buf, file.name);
   }
 

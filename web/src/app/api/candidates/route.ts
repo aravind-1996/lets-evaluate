@@ -50,42 +50,55 @@ export async function POST(req: Request) {
   const forbidden = requireApiRole(session.user.role, ["admin", "ta"]);
   if (forbidden) return forbidden;
 
-  const form = await req.formData();
-  const name = String(form.get("name") ?? "");
-  const email = String(form.get("email") ?? "");
-  const projectId = String(form.get("projectId") ?? "") || null;
-  const roleId = String(form.get("roleId") ?? "") || null;
-  const file = form.get("resume") as File | null;
+  try {
+    const form = await req.formData();
+    const name = String(form.get("name") ?? "");
+    const email = String(form.get("email") ?? "");
+    const projectId = String(form.get("projectId") ?? "") || null;
+    const roleId = String(form.get("roleId") ?? "") || null;
+    const file = form.get("resume") as File | null;
 
-  if (!name) return apiError("Name required", 400);
+    if (!name) return apiError("Name required", 400);
 
-  let resumeStorageKey: string | undefined;
-  let resumeFilename = "";
-  let resumeText: string | undefined;
+    let resumeStorageKey: string | undefined;
+    let resumeFilename = "";
+    let resumeText: string | undefined;
 
-  if (file && file.size > 0) {
-    if (file.size > 10 * 1024 * 1024) {
-      return apiError("Resume must be under 10MB", 400);
+    if (file && file.size > 0) {
+      if (file.size > 10 * 1024 * 1024) {
+        return apiError("Resume must be under 10MB", 400);
+      }
+      const buf = Buffer.from(await file.arrayBuffer());
+      resumeFilename = file.name;
+      // Persisting the raw file is best-effort — the extracted text drives
+      // analysis, so a storage failure must not block candidate creation.
+      try {
+        resumeStorageKey = await storeResume(buf, file.name);
+      } catch (err) {
+        console.error("Resume storage failed", err);
+      }
+      resumeText = await extractResumeText(buf, file.name);
     }
-    const buf = Buffer.from(await file.arrayBuffer());
-    resumeFilename = file.name;
-    resumeStorageKey = await storeResume(buf, file.name);
-    resumeText = await extractResumeText(buf, file.name);
+
+    const id = uuid();
+    await db.insert(candidates).values({
+      id,
+      organizationId: session.user.organizationId,
+      name,
+      email,
+      projectId,
+      roleId,
+      resumeStorageKey,
+      resumeFilename,
+      status: "draft",
+      createdById: session.user.id,
+    });
+
+    return NextResponse.json({ id, resumeText }, { status: 201 });
+  } catch (err) {
+    console.error("Candidate creation failed", err);
+    const message =
+      err instanceof Error ? err.message : "Failed to create candidate";
+    return apiError(message, 500);
   }
-
-  const id = uuid();
-  await db.insert(candidates).values({
-    id,
-    organizationId: session.user.organizationId,
-    name,
-    email,
-    projectId,
-    roleId,
-    resumeStorageKey,
-    resumeFilename,
-    status: "draft",
-    createdById: session.user.id,
-  });
-
-  return NextResponse.json({ id, resumeText }, { status: 201 });
 }

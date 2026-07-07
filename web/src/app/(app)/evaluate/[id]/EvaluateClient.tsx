@@ -56,6 +56,7 @@ export function EvaluateClient({
     initialResumeQuestions ?? [],
   );
   const [comments, setComments] = useState("");
+  const [analysisModel, setAnalysisModel] = useState<string | undefined>();
   const [reviewComments, setReviewComments] = useState("");
   const [messages, setMessages] = useState<{ role: "ai" | "you"; text: string }[]>([]);
   const [loading, setLoading] = useState(false);
@@ -102,6 +103,7 @@ export function EvaluateClient({
     setLoading(false);
     if (data.metrics) {
       setMetrics(data.metrics);
+      if (data.model) setAnalysisModel(data.model as string);
       setMessages([
         {
           role: "ai",
@@ -418,7 +420,7 @@ export function EvaluateClient({
             </p>
           )}
           <p className="mt-auto border-t border-white/15 pt-4 text-center text-[10px] leading-relaxed text-white/40">
-            GPT-4o-mini
+            Analysis: {(analysisModel ?? "gpt-4o").toUpperCase()}
             <br />
             Human review required
           </p>

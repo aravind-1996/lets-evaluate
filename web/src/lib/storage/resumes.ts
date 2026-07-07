@@ -1,8 +1,14 @@
 import { mkdir, writeFile, readFile } from "fs/promises";
+import os from "os";
 import path from "path";
 import { v4 as uuid } from "uuid";
 
-const LOCAL_DIR = path.join(process.cwd(), "storage", "resumes");
+// Serverless platforms (Vercel/Lambda) mount the app directory read-only; only
+// the OS temp dir is writable. Fall back to it so local file writes don't 500.
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const LOCAL_DIR = isServerless
+  ? path.join(os.tmpdir(), "resumes")
+  : path.join(process.cwd(), "storage", "resumes");
 
 export async function storeResume(
   file: Buffer,

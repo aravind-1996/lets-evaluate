@@ -34,7 +34,7 @@ export function LogoutButton({
           aria-label="Sign out"
           title="Sign out"
           className={cn(
-            "grid place-items-center rounded-lg text-[var(--ink-soft)] transition-colors hover:bg-white hover:text-red-600 disabled:opacity-50",
+            "grid cursor-pointer place-items-center rounded-lg text-[var(--ink-soft)] transition-colors hover:bg-white hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50",
             className,
           )}
         >
@@ -69,7 +69,7 @@ export function LogoutButton({
       onClick={handleLogout}
       disabled={loading}
       className={cn(
-        "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] font-semibold text-[var(--ink-soft)] transition-colors hover:bg-white hover:text-red-600 disabled:opacity-50",
+        "flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-left text-[12px] font-semibold text-[var(--ink-soft)] transition-colors hover:bg-white hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50",
         className,
       )}
     >

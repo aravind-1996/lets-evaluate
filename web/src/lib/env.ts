@@ -30,10 +30,7 @@ export function getEnv(): Env {
     AUTH_URL: process.env.AUTH_URL,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODEL: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
-    OPENAI_ANALYSIS_MODEL:
-      process.env.OPENAI_ANALYSIS_MODEL ??
-      process.env.OPENAI_MODEL ??
-      "gpt-4o",
+    OPENAI_ANALYSIS_MODEL: process.env.OPENAI_ANALYSIS_MODEL ?? "gpt-4o",
     RESUME_STORAGE_PROVIDER: process.env.RESUME_STORAGE_PROVIDER ?? "local",
     S3_BUCKET: process.env.S3_BUCKET,
     S3_REGION: process.env.S3_REGION,

@@ -10,13 +10,16 @@ function defaultModel() {
   return process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
 }
 
-/** Resume analysis — use a stronger model via OPENAI_ANALYSIS_MODEL */
+/**
+ * Resume analysis — always a full (non-mini) model. Deliberately does NOT fall
+ * back to OPENAI_MODEL so the main analysis never silently runs on gpt-4o-mini.
+ * Override only with the dedicated OPENAI_ANALYSIS_MODEL env var.
+ */
+export const ANALYSIS_MODEL =
+  process.env.OPENAI_ANALYSIS_MODEL?.trim() || "gpt-4o";
+
 function analysisModel() {
-  return (
-    process.env.OPENAI_ANALYSIS_MODEL?.trim() ||
-    process.env.OPENAI_MODEL?.trim() ||
-    "gpt-4o"
-  );
+  return ANALYSIS_MODEL;
 }
 
 function client() {
