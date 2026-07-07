@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import { Pill } from "@/components/Pill";
 import { FieldSelect, FieldTextarea } from "@/components/FormField";
-import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
 import type { ResumeMetrics } from "@/lib/ai";
 
@@ -172,38 +171,71 @@ export function EvaluateClient({
   const caseId = candidateId.slice(0, 8).toUpperCase();
   const score = metrics?.tech_match_score;
   const hasResume = Boolean(resumeFilename);
+  const analyzed = Boolean(metrics?.tech_match_score);
+  const questionsReady = standardQuestions.length > 0;
+
+  const isStepComplete = (n: number) =>
+    n === 1 ? analyzed : n === 2 || n === 3 ? questionsReady : false;
+  const maxReachableStep: 1 | 2 | 3 | 4 = analyzed
+    ? questionsReady
+      ? 4
+      : 2
+    : 1;
+  const canContinue = step < 4 && isStepComplete(step);
+
+  function goToStep(n: 1 | 2 | 3 | 4) {
+    if (n > maxReachableStep) return;
+    setStep(n);
+    saveDraft(n);
+  }
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <div className="flex items-center justify-between bg-[var(--navy)] px-5 py-3.5 text-white md:px-6">
-        <Logo href="/people" light />
-        <span className="case-label text-white/50">Case #{caseId} · Draft</span>
-        <button
-          type="button"
-          onClick={() => saveDraft(step)}
-          className="rounded-lg border border-white/30 bg-white/10 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/20"
-        >
-          {savedAt ? "Saved ✓" : "Save draft"}
-        </button>
+      <div className="flex items-center justify-between gap-3 bg-[var(--navy)] px-5 py-3.5 text-white md:px-6">
+        <div className="min-w-0">
+          <div className="truncate font-serif text-[1.05rem] leading-tight text-white">
+            {candidateName}
+          </div>
+          <div className="truncate text-[11px] text-white/50">{role}</div>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="case-label hidden text-white/50 sm:inline">
+            Case #{caseId} · Draft
+          </span>
+          <button
+            type="button"
+            onClick={() => saveDraft(step)}
+            className="rounded-lg border border-white/30 bg-white/10 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/20"
+          >
+            {savedAt ? "Saved ✓" : "Save draft"}
+          </button>
+        </div>
       </div>
 
       {canScreen && (
         <div className="flex border-b border-[var(--cream-2)]">
           {STEPS.map((label, i) => {
-            const n = i + 1;
-            const state = step === n ? "on" : step > n ? "done" : "idle";
+            const n = (i + 1) as 1 | 2 | 3 | 4;
+            const done = isStepComplete(n) && step !== n;
+            const state = step === n ? "on" : done ? "done" : "idle";
+            const reachable = n <= maxReachableStep;
             return (
-              <div
+              <button
                 key={label}
+                type="button"
+                onClick={() => goToStep(n)}
+                disabled={!reachable}
+                aria-current={step === n ? "step" : undefined}
+                title={reachable ? `Go to ${label}` : "Complete the previous step first"}
                 className={cn(
                   "eval-step",
                   state === "done" && "done",
                   state === "on" && "on",
                 )}
               >
-                <span className="num">{state === "done" ? "✓" : n}</span>
+                <span className="num">{done ? "✓" : n}</span>
                 {label}
-              </div>
+              </button>
             );
           })}
         </div>
@@ -286,7 +318,11 @@ export function EvaluateClient({
                 onClick={runAnalyze}
                 disabled={loading || !hasResume}
               >
-                {loading ? "Analyzing…" : "Analyze the candidate profile →"}
+                {loading
+                  ? "Analyzing…"
+                  : analyzed
+                    ? "Re-evaluate the profile →"
+                    : "Analyze the candidate profile →"}
               </Button>
             </section>
           )}
@@ -301,7 +337,7 @@ export function EvaluateClient({
                     onClick={runAnalyze}
                     disabled={loading || !hasResume}
                   >
-                    {loading ? "Analyzing…" : "Run AI analysis"}
+                    {loading ? "Analyzing…" : "Evaluate the profile →"}
                   </Button>
                 </div>
               ) : (
@@ -446,16 +482,25 @@ export function EvaluateClient({
           <Button
             variant="ghost"
             className="px-4 py-2 text-sm"
-            onClick={() => setStep((s) => Math.max(1, s - 1) as 1 | 2 | 3 | 4)}
+            onClick={() => goToStep(Math.max(1, step - 1) as 1 | 2 | 3 | 4)}
             disabled={step === 1}
           >
             ← Back
           </Button>
-          {step < 4 && step !== 1 && step !== 2 && (
-            <Button className="px-4 py-2 text-sm" onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3 | 4)}>
-              Continue →
-            </Button>
-          )}
+          <Button
+            className="px-4 py-2 text-sm"
+            onClick={() => goToStep(Math.min(4, step + 1) as 1 | 2 | 3 | 4)}
+            disabled={!canContinue}
+            title={
+              canContinue
+                ? undefined
+                : step === 1
+                  ? "Analyze the profile to continue"
+                  : "Complete this step to continue"
+            }
+          >
+            Continue →
+          </Button>
         </footer>
       )}
     </div>
