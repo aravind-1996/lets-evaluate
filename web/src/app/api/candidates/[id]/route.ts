@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { candidates, projects, roles } from "@/lib/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
-import { storeResume } from "@/lib/storage/resumes";
+import { storeResume, readResume } from "@/lib/storage/resumes";
 import { extractResumeText } from "@/lib/resume/parse";
 import {
   ANALYSIS_MODEL,
@@ -35,6 +35,27 @@ const screenSchema = z.object({
   decision: z.enum(["proceed", "hold", "reject"]).optional(),
   resumeText: z.string().optional(),
 });
+
+/**
+ * Resolve the resume text to analyze. Prefers text posted by the client but
+ * falls back to re-extracting it from the stored resume file so the TA never
+ * has to copy/paste the resume manually.
+ */
+async function resolveResumeText(
+  candidate: { resumeStorageKey: string | null; resumeFilename: string | null },
+  bodyText?: string,
+): Promise<string> {
+  if (bodyText && bodyText.trim()) return bodyText;
+  if (candidate.resumeStorageKey && candidate.resumeFilename) {
+    try {
+      const buf = await readResume(candidate.resumeStorageKey);
+      return await extractResumeText(buf, candidate.resumeFilename);
+    } catch (err) {
+      console.error("Resume re-extraction failed", err);
+    }
+  }
+  return "";
+}
 
 export async function POST(req: Request, { params }: Params) {
   const session = await auth();
@@ -80,9 +101,34 @@ export async function POST(req: Request, { params }: Params) {
   const requirements = role?.requirements ?? "";
 
   if (body.action === "analyze") {
-    const resumeText = body.resumeText ?? "";
-    if (!resumeText) return apiError("Resume text required", 400);
-    const metrics = await analyzeResume(resumeText, techStack, requirements);
+    const resumeText = await resolveResumeText(candidate, body.resumeText);
+    if (!resumeText) {
+      return apiError(
+        "No resume found. Re-upload the resume for this candidate.",
+        400,
+      );
+    }
+
+    const otherProjects = await db
+      .select({ name: projects.name, techStack: projects.techStack })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.organizationId, session.user.organizationId),
+          candidate.projectId
+            ? ne(projects.id, candidate.projectId)
+            : undefined,
+        ),
+      );
+
+    const metrics = await analyzeResume(resumeText, techStack, requirements, {
+      roleName: role?.name,
+      projectName: project?.name,
+      otherProjects: otherProjects.map((p) => ({
+        name: p.name,
+        techStack: (p.techStack as string[]) ?? [],
+      })),
+    });
 
     const [existing] = await db
       .select()
@@ -128,7 +174,7 @@ export async function POST(req: Request, { params }: Params) {
       .from(screenings)
       .where(eq(screenings.candidateId, id))
       .limit(1);
-    const resumeText = body.resumeText ?? "";
+    const resumeText = await resolveResumeText(candidate, body.resumeText);
     const std = await generateStandardQuestions(
       role?.name ?? "Engineer",
       techStack,

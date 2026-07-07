@@ -5,8 +5,9 @@ import { EvaluateClient } from "./EvaluateClient";
 import { NewCandidateClient } from "./NewCandidateClient";
 import { CabinetPage } from "@/components/CabinetPage";
 import { db } from "@/lib/db";
-import { roles } from "@/lib/db/schema";
+import { projects, roles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import type { ResumeMetrics } from "@/lib/ai";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -37,6 +38,14 @@ export default async function EvaluatePage({ params }: Params) {
         .limit(1)
     : [null];
 
+  const [projectRow] = detail.candidate.projectId
+    ? await db
+        .select()
+        .from(projects)
+        .where(eq(projects.id, detail.candidate.projectId))
+        .limit(1)
+    : [null];
+
   const canScreen =
     (session.user.role === "admin" || session.user.role === "ta") &&
     !["selected", "rejected", "interview_complete"].includes(
@@ -54,11 +63,13 @@ export default async function EvaluatePage({ params }: Params) {
       candidateId={id}
       candidateName={detail.candidate.name}
       role={roleRow?.name ?? "Role"}
+      projectName={projectRow?.name ?? undefined}
       resumeFilename={detail.candidate.resumeFilename ?? undefined}
       canScreen={canScreen && !detail.review}
       canReview={canReview && !!detail.assignments.length}
       initialMetrics={
-        (detail.screening?.metrics as Metrics | undefined) ?? undefined
+        (detail.screening?.metrics as Partial<ResumeMetrics> | undefined) ??
+        undefined
       }
       initialStandardQuestions={
         (detail.screening?.standardQuestions as { question?: string }[]) ?? []
@@ -70,10 +81,3 @@ export default async function EvaluatePage({ params }: Params) {
     />
   );
 }
-
-type Metrics = {
-  tech_match_score?: number;
-  recommendation?: string;
-  strengths?: string[];
-  concerns?: string[];
-};

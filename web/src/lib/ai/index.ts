@@ -46,33 +46,95 @@ function isUnknown(v: string) {
   return UNKNOWN.has((v || "").trim().toLowerCase());
 }
 
+export type CareerEntry = {
+  company: string;
+  title: string;
+  start: string;
+  end: string;
+  duration: string;
+  is_current?: boolean;
+};
+
+export type TechComparisonEntry = {
+  technology: string;
+  /** "Matched" | "Unmatched" | "Clarification" */
+  status: string;
+};
+
+export type TechExperienceEntry = {
+  technology: string;
+  first_year: string;
+  /** A year or "Present" when still in use */
+  last_year: string;
+  total_years: string;
+};
+
+export type Clarification = {
+  technology: string;
+  reason: string;
+};
+
+export type ProjectSuggestion = {
+  project: string;
+  reason: string;
+};
+
+export type Suitability = {
+  /** "Suitable" | "Partially suitable" | "Not suitable" | "" */
+  verdict: string;
+  description: string;
+};
+
 export type ResumeMetrics = {
   tech_match_score: number;
   experience_level: string;
   matched_technologies: string[];
   missing_technologies: string[];
-  tech_comparison: { technology: string; status: string }[];
+  tech_comparison: TechComparisonEntry[];
+  tech_experience: TechExperienceEntry[];
+  clarifications: Clarification[];
+  domain_expertise: string[];
   strengths: string[];
   concerns: string[];
   recommendation: string;
   summary: string;
   certifications: string[];
-  career_history: Record<string, unknown>[];
+  career_history: CareerEntry[];
   total_experience_mentioned: string;
   total_experience_calculated: string;
   is_currently_employed: boolean;
   current_employer: string;
+  current_role: string;
+  current_tenure: string;
+  suitability: Suitability;
+  project_suggestions: ProjectSuggestion[];
+};
+
+export type AnalyzeOptions = {
+  roleName?: string;
+  projectName?: string;
+  otherProjects?: { name: string; techStack: string[] }[];
 };
 
 export async function analyzeResume(
   resumeText: string,
   projectTechStack: string[],
   roleRequirements: string,
+  opts: AnalyzeOptions = {},
 ): Promise<ResumeMetrics> {
   const openai = client();
   if (!openai) {
     return emptyMetrics(projectTechStack, "OpenAI API key not configured");
   }
+
+  const roleName = opts.roleName?.trim() || "the role";
+  const projectName = opts.projectName?.trim() || "the project";
+  const otherProjectsBlock =
+    opts.otherProjects && opts.otherProjects.length
+      ? opts.otherProjects
+          .map((p) => `- ${p.name}: ${p.techStack.join(", ") || "n/a"}`)
+          .join("\n")
+      : "None provided";
 
   const prompt = `You are an expert technical recruiter performing a rigorous, evidence-based resume evaluation.
 
@@ -80,8 +142,10 @@ STRICT GROUNDING RULES — follow exactly to avoid hallucination:
 1. Base EVERY statement only on facts explicitly present in the resume text below. Never invent employers, job titles, dates, degrees, certifications, or skills.
 2. If a piece of information is not present, use an empty string "", an empty array [], or "Not specified" — never guess.
 3. Only list a technology under matched_technologies if it is clearly evidenced in the resume. Otherwise it is missing.
-4. Derive total_experience_calculated only from dated roles in the resume; if dates are missing, return "Not specified".
+4. Derive total_experience_calculated and per-technology years only from dated roles/skills in the resume; if dates are missing, return "Not specified".
 5. Be deterministic and consistent: identical input must always yield the same evaluation. Do not add creative embellishment.
+
+Role being evaluated: ${roleName} on project "${projectName}".
 
 Resume:
 ${resumeText.slice(0, MAX_RESUME)}
@@ -91,9 +155,32 @@ Required Tech Stack: ${projectTechStack.join(", ")}
 Role Requirements:
 ${roleRequirements.slice(0, MAX_ROLE)}
 
-Return ONLY a valid JSON object (no markdown) with keys: tech_match_score, experience_level, matched_technologies, missing_technologies, tech_comparison, strengths, concerns, recommendation, summary, certifications, career_history, total_experience_mentioned, total_experience_calculated, is_currently_employed, current_employer.
+Other open projects (for cross-suggestions):
+${otherProjectsBlock}
 
-tech_comparison MUST include ALL technologies from Required Tech Stack with status Matched or Unmatched. recommendation MUST be one of: "Proceed", "Hold", "Reject", justified strictly by resume evidence against the requirements.`;
+Return ONLY a valid JSON object (no markdown) with EXACTLY these keys:
+- tech_match_score (number)
+- experience_level (string)
+- matched_technologies (string[])
+- missing_technologies (string[])
+- tech_comparison: array of { technology, status } covering ALL Required Tech Stack items. status is "Matched" when clearly evidenced, "Unmatched" when absent, or "Clarification" when the resume only mentions it generically/vaguely (e.g. a bare keyword list) without concrete real-world usage.
+- tech_experience: array of { technology, first_year, last_year, total_years } for the candidate's most-used technologies, computed from dated experience. Use "Present" for last_year when still in use. Include the top technologies by usage. If dates are unavailable, use "Not specified".
+- clarifications: array of { technology, reason } for every technology the candidate listed only generically and where real-world, hands-on depth must be confirmed. reason briefly states why clarification is needed.
+- domain_expertise: string[] of business/industry domains explicitly evidenced (e.g. Banking, Healthcare). Empty if none.
+- strengths (string[])
+- concerns (string[])  // weaknesses / gaps from the resume
+- recommendation: one of "Proceed", "Hold", "Reject", justified strictly by resume evidence.
+- summary (string)
+- certifications (string[])
+- career_history: array of { company, title, start, end, duration, is_current } ordered most recent first.
+- total_experience_mentioned (string)
+- total_experience_calculated (string)
+- is_currently_employed (boolean)
+- current_employer (string)  // current or, if not employed, most recent employer
+- current_role (string)      // role/title at that employer
+- current_tenure (string)    // duration at that employer
+- suitability: { verdict, description } where verdict is "Suitable", "Partially suitable" or "Not suitable" for ${roleName} on "${projectName}", and description explains why in 1-3 sentences grounded in the resume.
+- project_suggestions: array of { project, reason } naming which of the "Other open projects" above better match this candidate's skills. Empty array if none are provided or none match.`;
 
   try {
     const res = await openai.chat.completions.create({
@@ -111,7 +198,7 @@ tech_comparison MUST include ALL technologies from Required Tech Stack with stat
       ],
     });
     const raw = res.choices[0]?.message?.content ?? "{}";
-    const result = parseJson<ResumeMetrics>(raw);
+    const result = withDefaults(parseJson<Partial<ResumeMetrics>>(raw));
     if (!result.tech_comparison?.length) {
       result.tech_comparison = projectTechStack.map((t) => ({
         technology: t,
@@ -123,9 +210,9 @@ tech_comparison MUST include ALL technologies from Required Tech Stack with stat
     const matched = result.tech_comparison.filter(
       (t) => t.status === "Matched",
     ).length;
-    result.tech_match_score = Math.round(
-      (matched / result.tech_comparison.length) * 100,
-    );
+    result.tech_match_score = result.tech_comparison.length
+      ? Math.round((matched / result.tech_comparison.length) * 100)
+      : 0;
     return result;
   } catch (e) {
     return emptyMetrics(
@@ -135,24 +222,45 @@ tech_comparison MUST include ALL technologies from Required Tech Stack with stat
   }
 }
 
-function emptyMetrics(stack: string[], msg: string): ResumeMetrics {
+/** Ensure every field exists so the UI never crashes on a partial model reply. */
+function withDefaults(r: Partial<ResumeMetrics>): ResumeMetrics {
   return {
-    tech_match_score: 0,
-    experience_level: "Unknown",
-    matched_technologies: [],
-    missing_technologies: stack,
-    tech_comparison: stack.map((t) => ({ technology: t, status: "Unmatched" })),
-    strengths: [],
-    concerns: [msg],
-    recommendation: "Hold",
-    summary: msg,
-    certifications: [],
-    career_history: [],
-    total_experience_mentioned: "",
-    total_experience_calculated: "",
-    is_currently_employed: false,
-    current_employer: "",
+    tech_match_score: r.tech_match_score ?? 0,
+    experience_level: r.experience_level ?? "",
+    matched_technologies: r.matched_technologies ?? [],
+    missing_technologies: r.missing_technologies ?? [],
+    tech_comparison: r.tech_comparison ?? [],
+    tech_experience: r.tech_experience ?? [],
+    clarifications: r.clarifications ?? [],
+    domain_expertise: r.domain_expertise ?? [],
+    strengths: r.strengths ?? [],
+    concerns: r.concerns ?? [],
+    recommendation: r.recommendation ?? "Hold",
+    summary: r.summary ?? "",
+    certifications: r.certifications ?? [],
+    career_history: r.career_history ?? [],
+    total_experience_mentioned: r.total_experience_mentioned ?? "",
+    total_experience_calculated: r.total_experience_calculated ?? "",
+    is_currently_employed: r.is_currently_employed ?? false,
+    current_employer: r.current_employer ?? "",
+    current_role: r.current_role ?? "",
+    current_tenure: r.current_tenure ?? "",
+    suitability: r.suitability ?? { verdict: "", description: "" },
+    project_suggestions: r.project_suggestions ?? [],
   };
+}
+
+function emptyMetrics(stack: string[], msg: string): ResumeMetrics {
+  return withDefaults({
+    concerns: [msg],
+    summary: msg,
+    recommendation: "Hold",
+    missing_technologies: stack,
+    tech_comparison: stack.map((t) => ({
+      technology: t,
+      status: "Unmatched",
+    })),
+  });
 }
 
 export async function generateStandardQuestions(

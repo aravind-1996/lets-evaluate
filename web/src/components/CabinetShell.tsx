@@ -158,8 +158,6 @@ export function CabinetShell({
     collapseStore.toggle();
   }
 
-  const isEvaluateFocus =
-    pathname.startsWith("/evaluate/") && !pathname.endsWith("/new");
   const sections = navForRole(userRole);
 
   function isActive(item: NavItem) {
@@ -176,7 +174,6 @@ export function CabinetShell({
       <div
         className={cn(
           "case-cabinet mx-auto flex min-h-[calc(100vh-3rem)] flex-col md:mx-6 md:h-[calc(100vh-3rem)] md:min-h-0 md:flex-row md:items-stretch",
-          isEvaluateFocus && "md:mx-auto md:max-w-[1100px]",
         )}
       >
         <aside
