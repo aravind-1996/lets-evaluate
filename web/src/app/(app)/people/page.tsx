@@ -40,7 +40,11 @@ export default async function PeoplePage() {
       session.user.id,
       session.user.role,
     ),
-    getActivityFeed(session.user.organizationId, 8),
+    getActivityFeed(
+      session.user.organizationId,
+      session.user.role === "admin" ? null : session.user.id,
+      8,
+    ),
   ]);
 
   return (

@@ -20,7 +20,10 @@ export async function GET(req: Request) {
   const view = searchParams.get("view");
 
   if (view === "feed") {
-    const feed = await getActivityFeed(session.user.organizationId);
+    const feed = await getActivityFeed(
+      session.user.organizationId,
+      session.user.role === "admin" ? null : session.user.id,
+    );
     return NextResponse.json(feed);
   }
 

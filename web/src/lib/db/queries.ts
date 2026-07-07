@@ -291,7 +291,11 @@ export async function getCandidateDetail(
   return { candidate, screening, review, assignments };
 }
 
-export async function getActivityFeed(organizationId: string, limit = 20) {
+export async function getActivityFeed(
+  organizationId: string,
+  actorId?: string | null,
+  limit = 20,
+) {
   return db
     .select({
       event: evaluationEvents,
@@ -299,7 +303,12 @@ export async function getActivityFeed(organizationId: string, limit = 20) {
     })
     .from(evaluationEvents)
     .leftJoin(users, eq(evaluationEvents.actorId, users.id))
-    .where(eq(evaluationEvents.organizationId, organizationId))
+    .where(
+      and(
+        eq(evaluationEvents.organizationId, organizationId),
+        actorId ? eq(evaluationEvents.actorId, actorId) : undefined,
+      ),
+    )
     .orderBy(desc(evaluationEvents.createdAt))
     .limit(limit);
 }
