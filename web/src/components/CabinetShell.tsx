@@ -169,16 +169,16 @@ export function CabinetShell({
   }
 
   return (
-    <div className="min-h-screen bg-[var(--cream)] pb-20 md:pb-6 md:pt-6">
+    <div className="min-h-screen bg-[var(--cream)] pb-20 md:h-screen md:overflow-hidden md:pb-6 md:pt-6">
       <div
         className={cn(
-          "case-cabinet mx-auto flex min-h-[calc(100vh-3rem)] max-w-[1180px] flex-col md:mx-6 md:flex-row md:items-start",
+          "case-cabinet mx-auto flex min-h-[calc(100vh-3rem)] max-w-[1180px] flex-col md:mx-6 md:h-[calc(100vh-3rem)] md:min-h-0 md:flex-row md:items-stretch",
           isEvaluateFocus && "max-w-[1100px]",
         )}
       >
         <aside
           className={cn(
-            "hidden shrink-0 flex-col border-b border-[var(--cream-2)] bg-[var(--cream-2)] transition-[width] duration-200 ease-out md:flex md:sticky md:top-6 md:h-[calc(100vh-3rem)] md:rounded-l-xl md:border-b-0 md:border-r",
+            "hidden shrink-0 flex-col border-b border-[var(--cream-2)] bg-[var(--cream-2)] transition-[width] duration-200 ease-out md:flex md:h-full md:rounded-l-xl md:border-b-0 md:border-r",
             collapsed ? "md:w-[74px]" : "md:w-[236px]",
           )}
         >
@@ -223,7 +223,7 @@ export function CabinetShell({
           )}
 
           <nav
-            className="flex flex-1 flex-col gap-1 overflow-hidden px-2 py-2"
+            className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2"
             aria-label="App navigation"
           >
             {sections.map((section, si) => (
@@ -322,7 +322,7 @@ export function CabinetShell({
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col bg-white md:min-h-[calc(100vh-3rem)] md:rounded-r-xl">
+        <div className="flex min-w-0 flex-1 flex-col bg-white md:h-full md:min-h-0 md:overflow-y-auto md:rounded-r-xl">
           <div className="flex items-center justify-between border-b border-[var(--cream-2)] px-4 py-3 md:hidden">
             <div className="flex min-w-0 items-center gap-2">
               <FaceAvatar name={userName} size="sm" />

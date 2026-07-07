@@ -13,7 +13,6 @@ export default async function SetupPage({
   const projects = await getOrgProjects(session.user.organizationId);
   const { tab } = await searchParams;
   const rawTab = Array.isArray(tab) ? tab[0] : tab;
-  const initialTab =
-    rawTab === "roles" || rawTab === "questions" ? rawTab : "projects";
+  const initialTab = rawTab === "roles" ? "roles" : "projects";
   return <SetupClient projects={projects} initialTab={initialTab} />;
 }
