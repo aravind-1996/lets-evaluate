@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth/rbac";
-import { getInterviewers, getOrgAssignments } from "@/lib/db/queries";
+import { getInterviewers, getStageBookings } from "@/lib/db/queries";
 import { CabinetPage, CaseCard } from "@/components/CabinetPage";
 import { FaceAvatar } from "@/components/FaceAvatar";
 import { Pill } from "@/components/Pill";
@@ -7,18 +7,17 @@ import { ButtonLink } from "@/components/Button";
 
 export default async function InterviewersPage() {
   const session = await requireRole(["admin", "ta"]);
-  const [interviewers, assignments] = await Promise.all([
+  const [interviewers, bookings] = await Promise.all([
     getInterviewers(session.user.organizationId),
-    getOrgAssignments(session.user.organizationId),
+    getStageBookings(session.user.organizationId),
   ]);
 
   const loadFor = (userId: string) => {
-    const mine = assignments.filter((a) => a.assigneeId === userId);
+    const mine = bookings.filter((b) => b.assigneeId === userId);
     return {
-      pending: mine.filter((a) =>
-        ["pending", "in_progress"].includes(a.assignment.status),
-      ).length,
-      completed: mine.filter((a) => a.assignment.status === "completed").length,
+      pending: mine.filter((b) => b.status === "active").length,
+      completed: mine.filter((b) => ["passed", "failed"].includes(b.status))
+        .length,
       total: mine.length,
     };
   };

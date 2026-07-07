@@ -4,17 +4,27 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import { Pill } from "@/components/Pill";
-import { FieldSelect, FieldTextarea } from "@/components/FormField";
+import { FieldTextarea } from "@/components/FormField";
 import { cn } from "@/lib/utils";
 import type { ResumeMetrics } from "@/lib/ai";
 
 type Metrics = Partial<ResumeMetrics>;
 
-type Question = { question?: string; text?: string; category?: string };
-
 type Ratings = Record<string, { recruiter?: string; interviewer?: string }>;
 
-const STEPS = ["Setup", "AI Analysis", "Questions", "Verdict"] as const;
+export type StageView = {
+  id: string;
+  label: string;
+  kind: "screening" | "technical" | "manager" | "hr" | "final" | "custom";
+  position: number;
+  status: "pending" | "active" | "passed" | "failed" | "skipped";
+  assigneeName: string | null;
+  dueAt: string | null;
+  decision: string | null;
+  comments: string | null;
+};
+
+const STEPS = ["Setup", "AI Analysis", "Verdict"] as const;
 
 export function EvaluateClient({
   candidateId,
@@ -24,11 +34,13 @@ export function EvaluateClient({
   resumeFilename,
   hasResume: initialHasResume,
   canScreen,
-  canReview,
   initialMetrics,
-  initialStandardQuestions,
-  initialResumeQuestions,
   screeningComments,
+  stages,
+  candidateStatus,
+  candidateEmail,
+  canFinalize,
+  myActiveStageId,
 }: {
   candidateId: string;
   candidateName: string;
@@ -37,34 +49,23 @@ export function EvaluateClient({
   resumeFilename?: string;
   hasResume: boolean;
   canScreen: boolean;
-  canReview: boolean;
   initialMetrics?: Metrics;
-  initialStandardQuestions?: Question[];
-  initialResumeQuestions?: Question[];
   screeningComments?: string;
+  stages: StageView[];
+  candidateStatus: string;
+  candidateEmail?: string;
+  canFinalize: boolean;
+  myActiveStageId: string | null;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(
-    initialMetrics?.tech_match_score
-      ? initialStandardQuestions?.length
-        ? 4
-        : 2
-      : 1,
+  const [step, setStep] = useState<1 | 2 | 3>(
+    initialMetrics?.tech_match_score ? 2 : 1,
   );
   const [metrics, setMetrics] = useState<Metrics | undefined>(initialMetrics);
-  const [standardQuestions, setStandardQuestions] = useState<Question[]>(
-    initialStandardQuestions ?? [],
-  );
-  const [resumeQuestions, setResumeQuestions] = useState<Question[]>(
-    initialResumeQuestions ?? [],
-  );
   const [comments, setComments] = useState("");
   const [analysisModel, setAnalysisModel] = useState<string | undefined>();
-  const [reviewComments, setReviewComments] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [interviewers, setInterviewers] = useState<{ id: string; name: string }[]>([]);
-  const [assignTo, setAssignTo] = useState("");
   const [ratings, setRatings] = useState<Ratings>({});
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [resumeReady, setResumeReady] = useState(initialHasResume);
@@ -73,14 +74,10 @@ export function EvaluateClient({
 
   useEffect(() => {
     if (canScreen) {
-      fetch("/api/interviewers")
-        .then((r) => r.json())
-        .then(setInterviewers)
-        .catch(() => {});
       fetch(`/api/drafts?candidateId=${candidateId}`)
         .then((r) => r.json())
         .then((d) => {
-          if (d?.step) setStep(d.step as 1 | 2 | 3 | 4);
+          if (d?.step) setStep(Math.min(3, d.step as number) as 1 | 2 | 3);
           if (d?.data?.comments) setComments(d.data.comments as string);
           if (d?.data?.ratings) setRatings(d.data.ratings as Ratings);
         })
@@ -143,53 +140,27 @@ export function EvaluateClient({
     }
   }
 
-  async function generateQuestions() {
+  async function decide(decision: "proceed" | "hold" | "reject") {
     setLoading(true);
     setError(null);
     const res = await fetch(`/api/candidates/${candidateId}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "questions" }),
-    });
-    const data = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(data?.error ?? "Could not generate questions.");
-      return;
-    }
-    if (data.standardQuestions) {
-      setStandardQuestions(data.standardQuestions);
-      setResumeQuestions(data.resumeQuestions ?? []);
-      setStep(3);
-      await saveDraft(3);
-    }
-  }
-
-  async function decide(decision: "proceed" | "hold" | "reject") {
-    await fetch(`/api/candidates/${candidateId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "decide", decision, comments }),
     });
-    if (decision === "proceed" && assignTo) {
-      await fetch(`/api/assignments/${candidateId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assignedToId: assignTo }),
-      });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setLoading(false);
+      setError(data?.error ?? "Could not record the verdict.");
+      return;
     }
     await fetch(`/api/drafts?id=${candidateId}`, { method: "DELETE" }).catch(() => {});
-    router.push("/people");
-    router.refresh();
-  }
-
-  async function submitReview(decision: "selected" | "rejected" | "hold") {
-    await fetch(`/api/assignments/${candidateId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comments: reviewComments, decision }),
-    });
-    router.push("/assignments");
+    if (decision === "proceed") {
+      // Next action: assign an interviewer via the scheduling calendar.
+      router.push(`/booking/${candidateId}`);
+    } else {
+      router.push("/people");
+    }
     router.refresh();
   }
 
@@ -197,18 +168,26 @@ export function EvaluateClient({
   const score = metrics?.tech_match_score;
   const hasResume = resumeReady;
   const analyzed = Boolean(metrics?.tech_match_score);
-  const questionsReady = standardQuestions.length > 0;
+
+  const screeningStage = stages.find((s) => s.kind === "screening");
+  const screeningOpen =
+    stages.length === 0 ||
+    !screeningStage ||
+    screeningStage.status === "active" ||
+    screeningStage.status === "pending";
+  const showWizard = canScreen && screeningOpen;
+
+  const myActiveStage = stages.find((s) => s.id === myActiveStageId) ?? null;
+  const activeInterviewStage = stages.find(
+    (s) => s.status === "active" && s.kind !== "screening" && s.kind !== "final",
+  );
 
   const isStepComplete = (n: number) =>
-    n === 1 ? analyzed : n === 2 || n === 3 ? questionsReady : false;
-  const maxReachableStep: 1 | 2 | 3 | 4 = analyzed
-    ? questionsReady
-      ? 4
-      : 2
-    : 1;
-  const canContinue = step < 4 && isStepComplete(step);
+    n === 1 || n === 2 ? analyzed : false;
+  const maxReachableStep: 1 | 2 | 3 = analyzed ? 3 : 1;
+  const canContinue = step < 3 && isStepComplete(step);
 
-  function goToStep(n: 1 | 2 | 3 | 4) {
+  function goToStep(n: 1 | 2 | 3) {
     if (n > maxReachableStep) return;
     setStep(n);
     saveDraft(n);
@@ -219,25 +198,27 @@ export function EvaluateClient({
       <div className="flex items-center justify-between gap-3 bg-[var(--navy)] px-5 py-3.5 text-white md:px-6">
         <div className="min-w-0">
           <div className="font-serif text-[1.05rem] leading-tight text-white">
-            Candidate screening
+            {showWizard ? "Candidate screening" : "Candidate case file"}
           </div>
           <div className="truncate text-[11px] text-white/50">
-            Case #{caseId} · Draft
+            Case #{caseId} · {candidateStatus.replace(/_/g, " ")}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => saveDraft(step)}
-          className="shrink-0 rounded-lg border border-white/30 bg-white/10 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/20"
-        >
-          {savedAt ? "Saved ✓" : "Save draft"}
-        </button>
+        {showWizard && (
+          <button
+            type="button"
+            onClick={() => saveDraft(step)}
+            className="shrink-0 rounded-lg border border-white/30 bg-white/10 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/20"
+          >
+            {savedAt ? "Saved ✓" : "Save draft"}
+          </button>
+        )}
       </div>
 
-      {canScreen && (
+      {showWizard && (
         <div className="flex border-b border-[var(--cream-2)]">
           {STEPS.map((label, i) => {
-            const n = (i + 1) as 1 | 2 | 3 | 4;
+            const n = (i + 1) as 1 | 2 | 3;
             const done = isStepComplete(n) && step !== n;
             const state = step === n ? "on" : done ? "done" : "idle";
             const reachable = n <= maxReachableStep;
@@ -281,7 +262,7 @@ export function EvaluateClient({
         </aside>
 
         <main className="overflow-auto p-5 md:p-7">
-          {canScreen && screeningComments && (
+          {screeningComments && (
             <div className="case-card mb-4 border-[var(--cyan)] bg-[var(--cyan-soft)] p-4 text-sm">
               <strong>TA screening notes:</strong> {screeningComments}
             </div>
@@ -307,13 +288,112 @@ export function EvaluateClient({
             )}
           </div>
 
+          {stages.length > 0 && <StagePipeline stages={stages} />}
+
+          {/* Context actions for the current pipeline position (non-screening). */}
+          {!showWizard && myActiveStage && (
+            <StageDecisionPanel
+              stage={myActiveStage}
+              metrics={metrics}
+              onDone={() => {
+                router.push("/assignments");
+                router.refresh();
+              }}
+            />
+          )}
+
+          {!showWizard && !myActiveStage && canFinalize && (
+            <FinalConfirmationPanel
+              candidateId={candidateId}
+              candidateName={candidateName}
+              candidateEmail={candidateEmail}
+              role={role}
+              projectName={projectName}
+              stages={stages}
+              metrics={metrics}
+              onDone={() => {
+                router.push("/people");
+                router.refresh();
+              }}
+            />
+          )}
+
+          {!showWizard && !myActiveStage && !canFinalize && canScreen && (
+            <div className="case-card mb-4 border-[var(--cyan)] bg-[var(--cyan-soft)] p-4">
+              {activeInterviewStage ? (
+                activeInterviewStage.assigneeName ? (
+                  <>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="case-label">
+                        {activeInterviewStage.label} — in progress
+                      </span>
+                      <Pill variant="cyan">Awaiting decision</Pill>
+                    </div>
+                    <p className="mt-2 text-sm">
+                      Assigned to <strong>{activeInterviewStage.assigneeName}</strong>
+                      {activeInterviewStage.dueAt && (
+                        <>
+                          {" · "}
+                          <span className="font-semibold text-[var(--cyan-d)]">
+                            {new Date(activeInterviewStage.dueAt).toLocaleString(
+                              "en-GB",
+                              {
+                                weekday: "short",
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                    <a
+                      href={`/booking/${candidateId}`}
+                      className="mt-2 inline-block text-xs font-semibold text-[var(--cyan-d)] hover:underline"
+                    >
+                      Reschedule / change assignee →
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="case-label">Next: {activeInterviewStage.label}</span>
+                      <Pill variant="orange">Needs assignee</Pill>
+                    </div>
+                    <p className="mt-2 text-sm text-[var(--ink-soft)]">
+                      Assign this round to a{" "}
+                      {activeInterviewStage.kind === "manager"
+                        ? "manager"
+                        : activeInterviewStage.kind === "hr"
+                          ? "HR"
+                          : "technical interviewer"}{" "}
+                      and book a slot.
+                    </p>
+                    <a
+                      href={`/booking/${candidateId}`}
+                      className="mt-2 inline-block text-sm font-semibold text-[var(--cyan-d)] hover:underline"
+                    >
+                      Assign interviewer & book →
+                    </a>
+                  </>
+                )
+              ) : (
+                <p className="text-sm text-[var(--ink-soft)]">
+                  This candidate has completed the interview flow.
+                </p>
+              )}
+            </div>
+          )}
+
           {error && (
             <div className="case-card mb-4 border-[var(--orange)] bg-[var(--orange-soft)] p-3 text-sm text-[var(--orange)]">
               {error}
             </div>
           )}
 
-          {canScreen && step === 1 && (
+          {showWizard && step === 1 && (
             <section className="case-card p-5 case-fade-in">
               <h2 className="font-serif text-xl font-bold">Evidence & analysis</h2>
               <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
@@ -391,7 +471,7 @@ export function EvaluateClient({
             </section>
           )}
 
-          {canScreen && step === 2 && (
+          {showWizard && step === 2 && (
             <section className="case-fade-in space-y-4">
               {!metrics ? (
                 <div className="case-card p-5">
@@ -418,8 +498,8 @@ export function EvaluateClient({
                     }}
                   />
                   <div className="case-card p-5">
-                    <Button onClick={generateQuestions} disabled={loading}>
-                      {loading ? "Generating…" : "Continue to questions →"}
+                    <Button onClick={() => goToStep(3)} disabled={loading}>
+                      Continue to verdict →
                     </Button>
                   </div>
                 </>
@@ -427,28 +507,7 @@ export function EvaluateClient({
             </section>
           )}
 
-          {canScreen && step === 3 && metrics && (
-            <section className="case-card p-5 case-fade-in">
-              <h2 className="font-serif text-xl font-bold">Interview questions</h2>
-              {standardQuestions.length === 0 ? (
-                <Button className="mt-4" onClick={generateQuestions} disabled={loading}>
-                  {loading ? "Generating…" : "Generate questions"}
-                </Button>
-              ) : (
-                <>
-                  <QuestionList title="Standard" items={standardQuestions} variant="cream" />
-                  {resumeQuestions.length > 0 && (
-                    <QuestionList title="Resume-specific" items={resumeQuestions} variant="cyan" />
-                  )}
-                  <Button className="mt-4" onClick={() => setStep(4)}>
-                    Continue to verdict →
-                  </Button>
-                </>
-              )}
-            </section>
-          )}
-
-          {canScreen && step === 4 && (
+          {showWizard && step === 3 && (
             <section className="case-card p-5 case-fade-in">
               <h2 className="font-serif text-xl font-bold">Record verdict</h2>
               {metrics && (metrics.recommendation || metrics.suitability?.verdict) && (
@@ -483,57 +542,24 @@ export function EvaluateClient({
                 value={comments}
                 onChange={(e) => setComments(e.target.value)}
               />
-              {interviewers.length > 0 && (
-                <FieldSelect
-                  className="mt-3"
-                  value={assignTo}
-                  onChange={(e) => setAssignTo(e.target.value)}
-                >
-                  <option value="">Assign interviewer (if proceed)</option>
-                  {interviewers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </FieldSelect>
-              )}
+              <p className="mt-3 text-xs text-[var(--ink-faint)]">
+                Choosing <strong>Proceed</strong> takes you to the interviewer
+                scheduling calendar to assign a panel member and book a slot.
+              </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Button onClick={() => decide("proceed")}>Proceed</Button>
-                <Button variant="ghost" onClick={() => decide("hold")}>
+                <Button onClick={() => decide("proceed")} disabled={loading}>
+                  {loading ? "Saving…" : "Proceed to scheduling →"}
+                </Button>
+                <Button variant="ghost" onClick={() => decide("hold")} disabled={loading}>
                   Hold
                 </Button>
-                <Button variant="ghost" onClick={() => decide("reject")}>
+                <Button variant="ghost" onClick={() => decide("reject")} disabled={loading}>
                   Reject
                 </Button>
               </div>
             </section>
           )}
 
-          {canReview && (
-            <section className="case-card mt-4 border-[var(--orange)] bg-[var(--orange-soft)] p-5">
-              <h2 className="font-serif text-xl font-bold">Interview review</h2>
-              {metrics && (
-                <p className="mt-2 text-sm">
-                  TA score: {metrics.tech_match_score}% — read-only screening summary
-                </p>
-              )}
-              <FieldTextarea
-                className="mt-3"
-                value={reviewComments}
-                onChange={(e) => setReviewComments(e.target.value)}
-                placeholder="Interview notes and recommendation…"
-              />
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button onClick={() => submitReview("selected")}>Selected</Button>
-                <Button variant="ghost" onClick={() => submitReview("hold")}>
-                  Hold
-                </Button>
-                <Button variant="ghost" onClick={() => submitReview("rejected")}>
-                  Reject
-                </Button>
-              </div>
-            </section>
-          )}
         </main>
 
         <aside className="hidden flex-col border-l border-[var(--cream-2)] bg-[var(--navy)] p-4 text-white md:flex">
@@ -567,21 +593,21 @@ export function EvaluateClient({
         </aside>
       </div>
 
-      {canScreen && (
+      {showWizard && (
         <footer className="flex items-center justify-between border-t border-[var(--cream-2)] bg-[var(--cream)] px-5 py-3.5 md:px-7">
           <Button
             variant="ghost"
             className="px-4 py-2 text-sm"
             onClick={() => {
               if (step === 1) router.back();
-              else goToStep((step - 1) as 1 | 2 | 3 | 4);
+              else goToStep((step - 1) as 1 | 2 | 3);
             }}
           >
             ← Back
           </Button>
           <Button
             className="px-4 py-2 text-sm"
-            onClick={() => goToStep(Math.min(4, step + 1) as 1 | 2 | 3 | 4)}
+            onClick={() => goToStep(Math.min(3, step + 1) as 1 | 2 | 3)}
             disabled={!canContinue}
             title={
               canContinue
@@ -596,6 +622,259 @@ export function EvaluateClient({
         </footer>
       )}
     </div>
+  );
+}
+
+/* ─────────────────────────── Stage pipeline ─────────────────────────── */
+
+function stageStatusMeta(status: StageView["status"]): {
+  variant: "green" | "orange" | "cyan" | "neutral";
+  label: string;
+} {
+  if (status === "passed") return { variant: "green", label: "Passed" };
+  if (status === "failed") return { variant: "orange", label: "Not selected" };
+  if (status === "active") return { variant: "cyan", label: "In progress" };
+  if (status === "skipped") return { variant: "neutral", label: "Skipped" };
+  return { variant: "neutral", label: "Pending" };
+}
+
+function StagePipeline({ stages }: { stages: StageView[] }) {
+  return (
+    <div className="case-card mb-4 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="case-label">Interview process</span>
+      </div>
+      <ol className="flex flex-wrap gap-2">
+        {stages.map((s, i) => {
+          const meta = stageStatusMeta(s.status);
+          return (
+            <li
+              key={s.id}
+              className={cn(
+                "flex min-w-[150px] flex-1 flex-col gap-1 rounded-xl border p-3",
+                s.status === "active"
+                  ? "border-[var(--cyan)] bg-[var(--cyan-soft)]"
+                  : "border-[var(--cream-2)] bg-[var(--cream)]",
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold",
+                    s.status === "passed"
+                      ? "bg-[var(--green)] text-white"
+                      : s.status === "failed"
+                        ? "bg-[var(--orange)] text-white"
+                        : "bg-[var(--ink)] text-white",
+                  )}
+                >
+                  {s.status === "passed" ? "✓" : s.status === "failed" ? "✕" : i + 1}
+                </span>
+                <span className="truncate text-[13px] font-bold">{s.label}</span>
+              </div>
+              <Pill variant={meta.variant} className="w-fit text-[10px]">
+                {meta.label}
+              </Pill>
+              {s.assigneeName && (
+                <span className="truncate text-[11px] text-[var(--ink-faint)]">
+                  {s.assigneeName}
+                  {s.dueAt
+                    ? ` · ${new Date(s.dueAt).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                      })}`
+                    : ""}
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+/* ─────────────────────────── Assignee decision ─────────────────────────── */
+
+function StageDecisionPanel({
+  stage,
+  metrics,
+  onDone,
+}: {
+  stage: StageView;
+  metrics?: Metrics;
+  onDone: () => void;
+}) {
+  const [comments, setComments] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function decide(decision: "yes" | "no") {
+    if (!comments.trim()) {
+      setError("Please add a short note with your decision.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/stages/${stage.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision, comments }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Could not submit your decision.");
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <section className="case-card mb-4 border-[var(--orange)] bg-[var(--orange-soft)] p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-serif text-xl font-bold">Your round: {stage.label}</h2>
+        <Pill variant="orange">Awaiting your verdict</Pill>
+      </div>
+      {metrics?.tech_match_score != null && (
+        <p className="mt-2 text-sm text-[var(--ink-soft)]">
+          TA screening tech match: {metrics.tech_match_score}%
+        </p>
+      )}
+      <FieldTextarea
+        className="mt-3"
+        value={comments}
+        onChange={(e) => setComments(e.target.value)}
+        placeholder="Interview notes, strengths, concerns…"
+      />
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>
+      )}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button onClick={() => decide("yes")} disabled={busy}>
+          {busy ? "Saving…" : "Yes — proceed to next round"}
+        </Button>
+        <Button variant="ghost" onClick={() => decide("no")} disabled={busy}>
+          No — do not proceed
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── Final confirmation ─────────────────────────── */
+
+function FinalConfirmationPanel({
+  candidateId,
+  candidateName,
+  candidateEmail,
+  role,
+  projectName,
+  stages,
+  metrics,
+  onDone,
+}: {
+  candidateId: string;
+  candidateName: string;
+  candidateEmail?: string;
+  role: string;
+  projectName?: string;
+  stages: StageView[];
+  metrics?: Metrics;
+  onDone: () => void;
+}) {
+  const [comments, setComments] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function finalize(finalDecision: "selected" | "rejected" | "hold") {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/candidates/${candidateId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "finalize", finalDecision, comments }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Could not record the final decision.");
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <section className="case-card mb-4 border-[var(--green)] bg-[var(--green-soft)] p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="font-serif text-xl font-bold">Final confirmation</h2>
+        <Pill variant="green">All rounds cleared</Pill>
+      </div>
+      <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+        Review the full candidate dossier and record the final outcome.
+      </p>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <KeyVal label="Candidate" value={candidateName} />
+        <KeyVal label="Email" value={candidateEmail || "—"} />
+        <KeyVal label="Role" value={projectName ? `${role} — ${projectName}` : role} />
+        <KeyVal
+          label="Tech match"
+          value={metrics?.tech_match_score != null ? `${metrics.tech_match_score}%` : "—"}
+        />
+      </div>
+
+      <div className="mt-4">
+        <span className="case-label">Round outcomes</span>
+        <ul className="mt-2 space-y-1.5">
+          {stages
+            .filter((s) => s.kind !== "final")
+            .map((s) => {
+              const meta = stageStatusMeta(s.status);
+              return (
+                <li
+                  key={s.id}
+                  className="flex flex-wrap items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-sm"
+                >
+                  <span className="font-semibold">{s.label}</span>
+                  <Pill variant={meta.variant} className="text-[10px]">
+                    {meta.label}
+                  </Pill>
+                  {s.assigneeName && (
+                    <span className="text-xs text-[var(--ink-faint)]">
+                      by {s.assigneeName}
+                    </span>
+                  )}
+                  {s.comments && (
+                    <span className="w-full text-xs text-[var(--ink-soft)]">
+                      “{s.comments}”
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+        </ul>
+      </div>
+
+      <FieldTextarea
+        className="mt-4"
+        value={comments}
+        onChange={(e) => setComments(e.target.value)}
+        placeholder="Final notes (offer details, reservations)…"
+      />
+      {error && <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button onClick={() => finalize("selected")} disabled={busy}>
+          {busy ? "Saving…" : "Confirm — Selected"}
+        </Button>
+        <Button variant="ghost" onClick={() => finalize("hold")} disabled={busy}>
+          Hold
+        </Button>
+        <Button variant="ghost" onClick={() => finalize("rejected")} disabled={busy}>
+          Reject
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -1104,35 +1383,6 @@ function MetricCell({
         {value}
       </div>
     </div>
-  );
-}
-
-function QuestionList({
-  title,
-  items,
-  variant,
-}: {
-  title: string;
-  items: Question[];
-  variant: "cream" | "cyan";
-}) {
-  return (
-    <>
-      <p className="case-label mt-4">{title}</p>
-      <ul className="mt-2 space-y-2 text-sm">
-        {items.map((q, i) => (
-          <li
-            key={i}
-            className={cn(
-              "rounded-xl p-3",
-              variant === "cyan" ? "bg-[var(--cyan-soft)]" : "bg-[var(--cream)]",
-            )}
-          >
-            {q.question ?? q.text ?? ""}
-          </li>
-        ))}
-      </ul>
-    </>
   );
 }
 

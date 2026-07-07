@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { candidates } from "@/lib/db/schema";
 import {
+  ensureCandidateStages,
   getActivityFeed,
   getCandidatesForUser,
   getUserStats,
@@ -94,6 +95,10 @@ export async function POST(req: Request) {
       status: "draft",
       createdById: session.user.id,
     });
+
+    // Materialize the candidate's interview flow from their project (or the
+    // org default) so the stage menu is available from the start.
+    await ensureCandidateStages(session.user.organizationId, id, projectId);
 
     return NextResponse.json({ id, resumeText }, { status: 201 });
   } catch (err) {

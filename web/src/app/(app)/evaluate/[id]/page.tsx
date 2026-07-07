@@ -1,5 +1,5 @@
 import { requireSession } from "@/lib/auth/rbac";
-import { getCandidateDetail } from "@/lib/db/queries";
+import { getCandidateDetail, ensureCandidateStages, getCandidateStages } from "@/lib/db/queries";
 import { notFound } from "next/navigation";
 import { EvaluateClient } from "./EvaluateClient";
 import { NewCandidateClient } from "./NewCandidateClient";
@@ -30,6 +30,13 @@ export default async function EvaluatePage({ params }: Params) {
   const detail = await getCandidateDetail(session.user.organizationId, id);
   if (!detail) notFound();
 
+  await ensureCandidateStages(
+    session.user.organizationId,
+    id,
+    detail.candidate.projectId,
+  );
+  const stagesRows = await getCandidateStages(id);
+
   const [roleRow] = detail.candidate.roleId
     ? await db
         .select()
@@ -52,11 +59,27 @@ export default async function EvaluatePage({ params }: Params) {
       detail.candidate.status,
     );
 
-  const canReview =
-    session.user.role === "interviewer" ||
-    detail.assignments.some(
-      (a) => a.assignment.assignedToId === session.user.id,
-    );
+  const stages = stagesRows.map((s) => ({
+    id: s.stage.id,
+    label: s.stage.label,
+    kind: s.stage.kind,
+    position: s.stage.position,
+    status: s.stage.status,
+    assigneeName: s.assigneeName ?? null,
+    dueAt: s.stage.dueAt ? s.stage.dueAt.toISOString() : null,
+    decision: s.stage.decision ?? null,
+    comments: s.stage.comments ?? null,
+  }));
+
+  const myActiveStageId =
+    stagesRows.find(
+      (s) =>
+        s.stage.assignedToId === session.user.id && s.stage.status === "active",
+    )?.stage.id ?? null;
+
+  const canFinalize =
+    (session.user.role === "admin" || session.user.role === "ta") &&
+    detail.candidate.status === "interview_complete";
 
   return (
     <EvaluateClient
@@ -70,18 +93,16 @@ export default async function EvaluatePage({ params }: Params) {
           detail.candidate.resumeStorageKey,
       )}
       canScreen={canScreen && !detail.review}
-      canReview={canReview && !!detail.assignments.length}
       initialMetrics={
         (detail.screening?.metrics as Partial<ResumeMetrics> | undefined) ??
         undefined
       }
-      initialStandardQuestions={
-        (detail.screening?.standardQuestions as { question?: string }[]) ?? []
-      }
-      initialResumeQuestions={
-        (detail.screening?.resumeQuestions as { question?: string }[]) ?? []
-      }
       screeningComments={detail.screening?.comments ?? undefined}
+      stages={stages}
+      candidateStatus={detail.candidate.status}
+      candidateEmail={detail.candidate.email ?? undefined}
+      canFinalize={canFinalize}
+      myActiveStageId={myActiveStageId}
     />
   );
 }

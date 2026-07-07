@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { candidates, projects, roles } from "@/lib/db/schema";
+import { candidates, projects, roles, candidateStages } from "@/lib/db/schema";
 import { and, eq, ne } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
@@ -16,7 +16,11 @@ import {
 import { screenings } from "@/lib/db/schema";
 import { logEvent } from "@/lib/events";
 import { apiError, rateLimit, requireApiRole } from "@/lib/api/helpers";
-import { getCandidateDetail } from "@/lib/db/queries";
+import {
+  ensureCandidateStages,
+  getCandidateDetail,
+  getCandidateStages,
+} from "@/lib/db/queries";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -30,9 +34,10 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 const screenSchema = z.object({
-  action: z.enum(["analyze", "questions", "decide"]),
+  action: z.enum(["analyze", "questions", "decide", "finalize"]),
   comments: z.string().optional(),
   decision: z.enum(["proceed", "hold", "reject"]).optional(),
+  finalDecision: z.enum(["selected", "rejected", "hold"]).optional(),
   resumeText: z.string().optional(),
 });
 
@@ -239,6 +244,54 @@ export async function POST(req: Request, { params }: Params) {
       })
       .where(eq(candidates.id, id));
 
+    // Advance the configurable interview flow off the screening stage.
+    await ensureCandidateStages(
+      session.user.organizationId,
+      id,
+      candidate.projectId,
+    );
+    const stages = await getCandidateStages(id);
+    const screeningStage =
+      stages.find((s) => s.stage.kind === "screening") ?? stages[0];
+
+    if (screeningStage) {
+      if (body.decision === "proceed") {
+        await db
+          .update(candidateStages)
+          .set({
+            status: "passed",
+            decision: "yes",
+            decidedById: session.user.id,
+            decidedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(candidateStages.id, screeningStage.stage.id));
+
+        const next = stages.find(
+          (s) =>
+            s.stage.position > screeningStage.stage.position &&
+            s.stage.status === "pending",
+        );
+        if (next) {
+          await db
+            .update(candidateStages)
+            .set({ status: "active", updatedAt: new Date() })
+            .where(eq(candidateStages.id, next.stage.id));
+        }
+      } else if (body.decision === "reject") {
+        await db
+          .update(candidateStages)
+          .set({
+            status: "failed",
+            decision: "no",
+            decidedById: session.user.id,
+            decidedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(candidateStages.id, screeningStage.stage.id));
+      }
+    }
+
     await logEvent({
       organizationId: session.user.organizationId,
       actorId: session.user.id,
@@ -246,6 +299,51 @@ export async function POST(req: Request, { params }: Params) {
       entityId: id,
       action: "screening.decided",
       payload: { decision: body.decision },
+    });
+
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.action === "finalize") {
+    const fd = body.finalDecision;
+    if (!fd) return apiError("Final decision required", 400);
+
+    await ensureCandidateStages(
+      session.user.organizationId,
+      id,
+      candidate.projectId,
+    );
+    const stages = await getCandidateStages(id);
+    const finalStage =
+      stages.find((s) => s.stage.kind === "final") ?? stages[stages.length - 1];
+
+    if (finalStage) {
+      await db
+        .update(candidateStages)
+        .set({
+          status:
+            fd === "selected" ? "passed" : fd === "rejected" ? "failed" : "active",
+          decision: fd === "hold" ? null : fd === "selected" ? "yes" : "no",
+          comments: body.comments ?? finalStage.stage.comments ?? "",
+          decidedById: session.user.id,
+          decidedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(candidateStages.id, finalStage.stage.id));
+    }
+
+    await db
+      .update(candidates)
+      .set({ status: fd, updatedAt: new Date() })
+      .where(eq(candidates.id, id));
+
+    await logEvent({
+      organizationId: session.user.organizationId,
+      actorId: session.user.id,
+      entityType: "candidate",
+      entityId: id,
+      action: "candidate.finalized",
+      payload: { decision: fd },
     });
 
     return NextResponse.json({ ok: true });

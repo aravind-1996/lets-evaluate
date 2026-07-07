@@ -15,6 +15,28 @@ export const memberRoleEnum = pgEnum("member_role", [
   "admin",
   "ta",
   "interviewer",
+  "manager",
+  "hr",
+]);
+
+/** Kinds of interview-process stages. Screening is the AI/TA screening,
+ * final is the final confirmation dossier; the rest are interview rounds. */
+export const stageKindEnum = pgEnum("stage_kind", [
+  "screening",
+  "technical",
+  "manager",
+  "hr",
+  "final",
+  "custom",
+]);
+
+/** Per-candidate progress through a configured stage. */
+export const stageStatusEnum = pgEnum("stage_status", [
+  "pending",
+  "active",
+  "passed",
+  "failed",
+  "skipped",
 ]);
 
 export const candidateStatusEnum = pgEnum("candidate_status", [
@@ -138,6 +160,83 @@ export const roles = pgTable(
       .notNull(),
   },
   (t) => [index("roles_org_idx").on(t.organizationId)],
+);
+
+/**
+ * Configurable interview-process template. A row with projectId = null defines
+ * the organization's general/default flow; rows with a projectId override the
+ * flow for that project.
+ */
+export const pipelineStages = pgTable(
+  "pipeline_stages",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    projectId: text("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
+    label: text("label").notNull(),
+    kind: stageKindEnum("kind").notNull().default("custom"),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("pipeline_stages_org_idx").on(t.organizationId),
+    index("pipeline_stages_project_idx").on(t.projectId),
+  ],
+);
+
+/**
+ * A candidate's materialized progress through their project's interview flow.
+ * One row per stage, ordered by position.
+ */
+export const candidateStages = pgTable(
+  "candidate_stages",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    candidateId: text("candidate_id")
+      .notNull()
+      .references(() => candidates.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    kind: stageKindEnum("kind").notNull().default("custom"),
+    position: integer("position").notNull().default(0),
+    status: stageStatusEnum("status").notNull().default("pending"),
+    assignedToId: text("assigned_to_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    assignedById: text("assigned_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    handoffNote: text("handoff_note").default(""),
+    decision: text("decision"),
+    comments: text("comments").default(""),
+    decidedById: text("decided_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("candidate_stages_candidate_idx").on(t.candidateId),
+    index("candidate_stages_org_idx").on(t.organizationId),
+    index("candidate_stages_assignee_idx").on(t.assignedToId),
+  ],
 );
 
 export const questions = pgTable(

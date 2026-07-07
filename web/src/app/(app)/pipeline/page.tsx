@@ -16,7 +16,11 @@ export default async function PipelinePage() {
   const columns = [
     { key: "screening", label: "Screening", statuses: ["draft", "screening", "screened_hold"] },
     { key: "ready", label: "Ready", statuses: ["ready_for_interview"] },
-    { key: "interview", label: "Interview", statuses: ["assigned", "interview_in_progress"] },
+    {
+      key: "interview",
+      label: "Interview",
+      statuses: ["assigned", "interview_in_progress", "interview_complete"],
+    },
     {
       key: "done",
       label: "Decided",

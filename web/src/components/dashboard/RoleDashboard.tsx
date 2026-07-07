@@ -16,6 +16,15 @@ type ActivityRow = {
   actorName: string | null;
 };
 
+type ScheduledRow = {
+  id: string;
+  candidateId: string;
+  candidateName: string;
+  interviewerName: string;
+  status: string;
+  dueAt: string;
+};
+
 function stagePill(status: string) {
   if (status.includes("screen")) return { label: "Analysis", variant: "orange" as const };
   if (status === "assigned" || status === "interview_in_progress")
@@ -33,6 +42,7 @@ export function TeamDashboard({
   stats,
   feed,
   today,
+  scheduled = [],
 }: {
   role: MemberRole;
   candidates: CandidateRow[];
@@ -43,6 +53,7 @@ export function TeamDashboard({
   };
   feed: ActivityRow[];
   today: string;
+  scheduled?: ScheduledRow[];
 }) {
   const inProgress = candidates.filter((c) =>
     ["screening", "ready_for_interview", "assigned", "draft"].includes(c.status),
@@ -180,6 +191,36 @@ export function TeamDashboard({
         />
       </div>
 
+      {scheduled.length > 0 && (
+        <section className="mb-5">
+          <CasePanel title="Scheduled interviews">
+            {scheduled.slice(0, 6).map((s) => (
+              <div key={s.id} className="case-row">
+                <strong>{s.candidateName}</strong>
+                <span className="truncate text-[var(--ink-soft)]">
+                  with {s.interviewerName}
+                </span>
+                <Pill variant="cyan">
+                  {new Date(s.dueAt).toLocaleString("en-GB", {
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Pill>
+                <ButtonLink
+                  href={`/booking/${s.candidateId}`}
+                  variant="ghost"
+                  className="px-3 py-1 text-[11px]"
+                >
+                  Manage
+                </ButtonLink>
+              </div>
+            ))}
+          </CasePanel>
+        </section>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-[1.4fr_0.6fr]">
         <CasePanel title="Open case files">
           {candidates.length === 0 ? (
@@ -245,16 +286,18 @@ export function InterviewerDashboard({
   today,
 }: {
   assignments: {
-    assignment: { id: string; status: string; handoffNote: string | null };
+    id: string;
+    status: string;
+    label: string;
+    dueAt: string | null;
+    handoffNote: string | null;
     candidate: { id: string; name: string };
   }[];
   today: string;
 }) {
-  const pending = assignments.filter((a) =>
-    ["pending", "in_progress"].includes(a.assignment.status),
-  );
-  const completed = assignments.filter(
-    (a) => a.assignment.status === "completed",
+  const pending = assignments.filter((a) => a.status === "active");
+  const completed = assignments.filter((a) =>
+    ["passed", "failed"].includes(a.status),
   );
 
   return (
@@ -291,15 +334,33 @@ export function InterviewerDashboard({
             No assignments yet. Your TA will assign candidates when ready.
           </p>
         ) : (
-          assignments.slice(0, 8).map(({ assignment, candidate }) => (
-            <div key={assignment.id} className="case-row">
-              <strong>{candidate.name}</strong>
+          assignments.slice(0, 8).map((a) => (
+            <div key={a.id} className="case-row">
+              <strong>{a.candidate.name}</strong>
               <span className="truncate text-[var(--ink-soft)]">
-                {assignment.handoffNote || "No handoff note"}
+                {a.label}
+                {a.dueAt
+                  ? ` · ${new Date(a.dueAt).toLocaleString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}`
+                  : ""}
               </span>
-              <Pill variant="cyan">{assignment.status.replace(/_/g, " ")}</Pill>
+              <Pill
+                variant={
+                  a.status === "active"
+                    ? "cyan"
+                    : a.status === "passed"
+                      ? "green"
+                      : "neutral"
+                }
+              >
+                {a.status === "active" ? "To review" : a.status}
+              </Pill>
               <ButtonLink
-                href={`/evaluate/${candidate.id}`}
+                href={`/evaluate/${a.candidate.id}`}
                 variant="ghost"
                 className="px-3 py-1 text-[11px]"
               >

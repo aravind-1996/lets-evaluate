@@ -1,18 +1,13 @@
 import { requireRole } from "@/lib/auth/rbac";
-import {
-  getBookableCandidates,
-  getInterviewers,
-  getOrgAssignments,
-} from "@/lib/db/queries";
+import { getBookableCandidates, getStageBookings } from "@/lib/db/queries";
 import { CabinetPage } from "@/components/CabinetPage";
 import { BookingClient } from "./BookingClient";
 
 export default async function BookingPage() {
   const session = await requireRole(["admin", "ta"]);
-  const [bookable, interviewers, assignments] = await Promise.all([
+  const [bookable, bookings] = await Promise.all([
     getBookableCandidates(session.user.organizationId),
-    getInterviewers(session.user.organizationId),
-    getOrgAssignments(session.user.organizationId),
+    getStageBookings(session.user.organizationId),
   ]);
 
   const candidates = bookable.map((row) => {
@@ -33,25 +28,26 @@ export default async function BookingPage() {
     };
   });
 
-  const upcoming = assignments
-    .filter((a) => ["pending", "in_progress"].includes(a.assignment.status))
-    .map((a) => ({
-      id: a.assignment.id,
-      candidateName: a.candidate.name,
-      interviewer: a.assigneeName,
-      status: a.assignment.status,
-      dueAt: a.assignment.dueAt ? a.assignment.dueAt.toISOString() : null,
-      handoffNote: a.assignment.handoffNote ?? "",
+  const upcoming = bookings
+    .filter((b) => b.assigneeId && b.dueAt && b.status === "active")
+    .map((b) => ({
+      id: b.id,
+      candidateId: b.candidateId,
+      candidateName: b.candidateName,
+      interviewer: `${b.assigneeName ?? "—"} · ${b.label}`,
+      status: b.status,
+      dueAt: b.dueAt ? (b.dueAt as Date).toISOString() : null,
+      handoffNote: "",
     }));
 
   return (
     <CabinetPage
       title="Booking"
-      subtitle="Assign screened candidates and their AI evaluation report to an interviewer"
+      subtitle="Assign screened candidates to the right interviewer for their current round"
     >
       <BookingClient
         candidates={candidates}
-        interviewers={interviewers}
+        interviewers={[]}
         upcoming={upcoming}
       />
     </CabinetPage>

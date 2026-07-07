@@ -34,7 +34,7 @@ type NavItem = {
 type NavSection = { label?: string; items: NavItem[] };
 
 function navForRole(role: MemberRole): NavSection[] {
-  if (role === "interviewer") {
+  if (role === "interviewer" || role === "manager" || role === "hr") {
     return [
       {
         items: [
@@ -78,6 +78,7 @@ function navForRole(role: MemberRole): NavSection[] {
       items: [
         { href: "/setup/projects", label: "Projects", icon: ProjectsIcon },
         { href: "/setup/roles", label: "Roles", icon: RolesIcon },
+        { href: "/setup/pipeline", label: "Interview Process", icon: PipelineIcon },
         { href: "/openings", label: "Openings", icon: OpeningsIcon },
       ],
     },
@@ -100,11 +101,10 @@ function navForRole(role: MemberRole): NavSection[] {
 }
 
 function mobileNavForRole(role: MemberRole) {
-  if (role === "interviewer") {
+  if (role === "interviewer" || role === "manager" || role === "hr") {
     return [
       { href: "/people", label: "Home" },
       { href: "/assignments", label: "Assign" },
-      { href: "/evaluate/new", label: "+", accent: true as const },
       { href: "/archive", label: "Archive" },
     ];
   }

@@ -15,6 +15,13 @@
       "when": 1783369601490,
       "tag": "0001_openings_status",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783443856043,
+      "tag": "0002_groovy_patch",
+      "breakpoints": true
     }
   ]
 }

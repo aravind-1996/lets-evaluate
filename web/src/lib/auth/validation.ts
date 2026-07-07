@@ -68,7 +68,13 @@ export function validatePassword(password: string): string | null {
   return null;
 }
 
-export const memberRoleSchema = z.enum(["admin", "ta", "interviewer"]);
+export const memberRoleSchema = z.enum([
+  "admin",
+  "ta",
+  "interviewer",
+  "manager",
+  "hr",
+]);
 
 export const registerBodySchema = z
   .object({
@@ -140,7 +146,9 @@ export function formatZodError(error: z.ZodError): string {
 export const ROLE_LABELS: Record<MemberRole, string> = {
   admin: "Admin — full workspace control",
   ta: "Talent Acquisition — screen & assign candidates",
-  interviewer: "Interviewer — conduct assigned interviews",
+  interviewer: "Interviewer — conduct assigned technical interviews",
+  manager: "Manager — conduct assigned manager rounds",
+  hr: "HR — conduct assigned HR rounds",
 };
 
 /** Short role title for profile chrome (e.g. sidebar). */

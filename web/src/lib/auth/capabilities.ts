@@ -15,3 +15,8 @@ export function canManageSetup(role: MemberRole) {
 export function isTeamLead(role: MemberRole) {
   return role === "admin" || role === "ta";
 }
+
+/** Panel roles conduct assigned interview rounds (they have "My assignments"). */
+export function isPanelRole(role: MemberRole) {
+  return role === "interviewer" || role === "manager" || role === "hr";
+}

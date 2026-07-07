@@ -10,9 +10,40 @@ import {
   evaluationEvents,
   organizationMembers,
   users,
+  pipelineStages,
+  candidateStages,
 } from "@/lib/db/schema";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { v4 as uuid } from "uuid";
 import type { MemberRole } from "@/lib/auth/config";
+
+export type StageKind =
+  | "screening"
+  | "technical"
+  | "manager"
+  | "hr"
+  | "final"
+  | "custom";
+
+export type StageTemplateItem = { label: string; kind: StageKind };
+
+/** The organization's out-of-the-box interview process. */
+export const DEFAULT_STAGE_TEMPLATE: StageTemplateItem[] = [
+  { label: "Screening", kind: "screening" },
+  { label: "First level technical", kind: "technical" },
+  { label: "Second level technical", kind: "technical" },
+  { label: "Manager", kind: "manager" },
+  { label: "HR", kind: "hr" },
+  { label: "Final Confirmation", kind: "final" },
+];
+
+/** Which member roles may be booked as the assignee for a given stage kind. */
+export function rolesForStageKind(kind: StageKind): MemberRole[] {
+  if (kind === "manager") return ["manager"];
+  if (kind === "hr") return ["hr"];
+  // technical / custom interview rounds
+  return ["interviewer"];
+}
 
 export async function getOrgProjects(organizationId: string) {
   return db
@@ -288,7 +319,9 @@ export async function getCandidateDetail(
     .innerJoin(users, eq(interviewAssignments.assignedToId, users.id))
     .where(eq(interviewAssignments.candidateId, candidateId));
 
-  return { candidate, screening, review, assignments };
+  const stages = await getCandidateStages(candidateId);
+
+  return { candidate, screening, review, assignments, stages };
 }
 
 export async function getActivityFeed(
@@ -326,12 +359,31 @@ export async function getInterviewers(organizationId: string) {
     .where(
       and(
         eq(organizationMembers.organizationId, organizationId),
-        or(
-          eq(organizationMembers.role, "interviewer"),
-          eq(organizationMembers.role, "admin"),
-        ),
+        inArray(organizationMembers.role, ["interviewer", "manager", "hr"]),
       ),
     );
+}
+
+/**
+ * All interview bookings for the org, flattened for the scheduling calendar.
+ * Includes who is interviewing, for which candidate, when, and the state.
+ */
+export async function getInterviewerBookings(organizationId: string) {
+  return db
+    .select({
+      id: interviewAssignments.id,
+      interviewerId: interviewAssignments.assignedToId,
+      interviewerName: users.name,
+      candidateId: interviewAssignments.candidateId,
+      candidateName: candidates.name,
+      status: interviewAssignments.status,
+      dueAt: interviewAssignments.dueAt,
+    })
+    .from(interviewAssignments)
+    .innerJoin(users, eq(interviewAssignments.assignedToId, users.id))
+    .innerJoin(candidates, eq(interviewAssignments.candidateId, candidates.id))
+    .where(eq(interviewAssignments.organizationId, organizationId))
+    .orderBy(desc(interviewAssignments.dueAt));
 }
 
 export async function getBookableCandidates(organizationId: string) {
@@ -411,4 +463,206 @@ export async function getAssignmentsForUser(
       ),
     )
     .orderBy(desc(interviewAssignments.createdAt));
+}
+
+/* ─────────────────────── Configurable interview pipeline ─────────────────────── */
+
+/**
+ * The stage template that applies to a project: its own override rows if it has
+ * any, otherwise the org general default, otherwise the built-in default.
+ */
+export async function getEffectiveStageTemplate(
+  organizationId: string,
+  projectId?: string | null,
+): Promise<StageTemplateItem[]> {
+  if (projectId) {
+    const projectRows = await db
+      .select()
+      .from(pipelineStages)
+      .where(
+        and(
+          eq(pipelineStages.organizationId, organizationId),
+          eq(pipelineStages.projectId, projectId),
+        ),
+      )
+      .orderBy(asc(pipelineStages.position));
+    if (projectRows.length) {
+      return projectRows.map((r) => ({ label: r.label, kind: r.kind }));
+    }
+  }
+
+  const generalRows = await db
+    .select()
+    .from(pipelineStages)
+    .where(
+      and(
+        eq(pipelineStages.organizationId, organizationId),
+        isNull(pipelineStages.projectId),
+      ),
+    )
+    .orderBy(asc(pipelineStages.position));
+  if (generalRows.length) {
+    return generalRows.map((r) => ({ label: r.label, kind: r.kind }));
+  }
+
+  return DEFAULT_STAGE_TEMPLATE;
+}
+
+/** Raw stage rows for a scope (general when projectId is null). */
+export async function getPipelineStageRows(
+  organizationId: string,
+  projectId: string | null,
+) {
+  return db
+    .select()
+    .from(pipelineStages)
+    .where(
+      and(
+        eq(pipelineStages.organizationId, organizationId),
+        projectId
+          ? eq(pipelineStages.projectId, projectId)
+          : isNull(pipelineStages.projectId),
+      ),
+    )
+    .orderBy(asc(pipelineStages.position));
+}
+
+/** Replace the configured stages for a scope with a new ordered list. */
+export async function savePipelineStages(
+  organizationId: string,
+  projectId: string | null,
+  stages: StageTemplateItem[],
+) {
+  await db
+    .delete(pipelineStages)
+    .where(
+      and(
+        eq(pipelineStages.organizationId, organizationId),
+        projectId
+          ? eq(pipelineStages.projectId, projectId)
+          : isNull(pipelineStages.projectId),
+      ),
+    );
+  if (!stages.length) return;
+  await db.insert(pipelineStages).values(
+    stages.map((s, i) => ({
+      id: uuid(),
+      organizationId,
+      projectId,
+      label: s.label,
+      kind: s.kind,
+      position: i,
+    })),
+  );
+}
+
+/**
+ * Materialize a candidate's stage rows from their project's flow if they don't
+ * already exist. The first stage (screening) starts active.
+ */
+export async function ensureCandidateStages(
+  organizationId: string,
+  candidateId: string,
+  projectId?: string | null,
+) {
+  const [existing] = await db
+    .select({ id: candidateStages.id })
+    .from(candidateStages)
+    .where(eq(candidateStages.candidateId, candidateId))
+    .limit(1);
+  if (existing) return;
+
+  const template = await getEffectiveStageTemplate(organizationId, projectId);
+  await db.insert(candidateStages).values(
+    template.map((s, i) => ({
+      id: uuid(),
+      organizationId,
+      candidateId,
+      label: s.label,
+      kind: s.kind,
+      position: i,
+      status: (i === 0 ? "active" : "pending") as
+        | "active"
+        | "pending",
+    })),
+  );
+}
+
+export async function getCandidateStages(candidateId: string) {
+  return db
+    .select({
+      stage: candidateStages,
+      assigneeName: users.name,
+      assigneeEmail: users.email,
+    })
+    .from(candidateStages)
+    .leftJoin(users, eq(candidateStages.assignedToId, users.id))
+    .where(eq(candidateStages.candidateId, candidateId))
+    .orderBy(asc(candidateStages.position));
+}
+
+/** Users that may be assigned to a stage of the given kind. */
+export async function getAssignableUsers(
+  organizationId: string,
+  kind: StageKind,
+) {
+  const allowed = rolesForStageKind(kind);
+  return db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: organizationMembers.role,
+    })
+    .from(organizationMembers)
+    .innerJoin(users, eq(organizationMembers.userId, users.id))
+    .where(
+      and(
+        eq(organizationMembers.organizationId, organizationId),
+        inArray(organizationMembers.role, allowed),
+      ),
+    )
+    .orderBy(asc(users.name));
+}
+
+/** All scheduled/active stage bookings for the calendar and dashboards. */
+export async function getStageBookings(organizationId: string) {
+  return db
+    .select({
+      id: candidateStages.id,
+      candidateId: candidateStages.candidateId,
+      candidateName: candidates.name,
+      label: candidateStages.label,
+      kind: candidateStages.kind,
+      status: candidateStages.status,
+      dueAt: candidateStages.dueAt,
+      assigneeId: candidateStages.assignedToId,
+      assigneeName: users.name,
+    })
+    .from(candidateStages)
+    .innerJoin(candidates, eq(candidateStages.candidateId, candidates.id))
+    .leftJoin(users, eq(candidateStages.assignedToId, users.id))
+    .where(eq(candidateStages.organizationId, organizationId))
+    .orderBy(desc(candidateStages.dueAt));
+}
+
+/** Active stages assigned to a specific panel member (their queue). */
+export async function getStageAssignmentsForUser(
+  organizationId: string,
+  userId: string,
+) {
+  return db
+    .select({
+      stage: candidateStages,
+      candidate: candidates,
+    })
+    .from(candidateStages)
+    .innerJoin(candidates, eq(candidateStages.candidateId, candidates.id))
+    .where(
+      and(
+        eq(candidateStages.organizationId, organizationId),
+        eq(candidateStages.assignedToId, userId),
+      ),
+    )
+    .orderBy(asc(candidateStages.dueAt));
 }

@@ -1,8 +1,10 @@
 import { requireSession } from "@/lib/auth/rbac";
+import { isPanelRole } from "@/lib/auth/capabilities";
 import {
   getActivityFeed,
-  getAssignmentsForUser,
   getCandidatesForUser,
+  getStageAssignmentsForUser,
+  getStageBookings,
   getUserStats,
 } from "@/lib/db/queries";
 import {
@@ -19,17 +21,23 @@ export default async function PeoplePage() {
     year: "numeric",
   });
 
-  if (session.user.role === "interviewer") {
-    const assignments = await getAssignmentsForUser(
+  if (isPanelRole(session.user.role)) {
+    const rows = await getStageAssignmentsForUser(
       session.user.organizationId,
       session.user.id,
     );
-    return (
-      <InterviewerDashboard assignments={assignments} today={today} />
-    );
+    const assignments = rows.map((r) => ({
+      id: r.stage.id,
+      status: r.stage.status,
+      label: r.stage.label,
+      dueAt: r.stage.dueAt ? r.stage.dueAt.toISOString() : null,
+      handoffNote: r.stage.handoffNote,
+      candidate: { id: r.candidate.id, name: r.candidate.name },
+    }));
+    return <InterviewerDashboard assignments={assignments} today={today} />;
   }
 
-  const [candidates, stats, feed] = await Promise.all([
+  const [candidates, stats, feed, bookings] = await Promise.all([
     getCandidatesForUser(
       session.user.organizationId,
       session.user.id,
@@ -45,7 +53,28 @@ export default async function PeoplePage() {
       session.user.role === "admin" ? null : session.user.id,
       8,
     ),
+    getStageBookings(session.user.organizationId),
   ]);
+
+  // TAs only see interviews for candidates they own; admins see the whole org.
+  const ownedIds = new Set(candidates.map((c) => c.id));
+  const scheduled = bookings
+    .filter(
+      (b) =>
+        b.dueAt &&
+        b.assigneeId &&
+        b.status === "active" &&
+        (session.user.role === "admin" || ownedIds.has(b.candidateId)),
+    )
+    .map((b) => ({
+      id: b.id,
+      candidateId: b.candidateId,
+      candidateName: b.candidateName,
+      interviewerName: `${b.assigneeName ?? "—"} · ${b.label}`,
+      status: b.status,
+      dueAt: (b.dueAt as Date).toISOString(),
+    }))
+    .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
 
   return (
     <TeamDashboard
@@ -54,6 +83,7 @@ export default async function PeoplePage() {
       stats={stats}
       feed={feed}
       today={today}
+      scheduled={scheduled}
     />
   );
 }
