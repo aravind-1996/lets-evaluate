@@ -13,7 +13,11 @@ export async function GET(req: Request) {
   if (!session?.user) return apiError("Unauthorized", 401);
   const { searchParams } = new URL(req.url);
   const roleId = searchParams.get("roleId") ?? undefined;
-  const rows = await getOrgQuestions(session.user.organizationId, roleId);
+  const rows = await getOrgQuestions(
+    session.user.organizationId,
+    roleId,
+    session.user.id,
+  );
   return NextResponse.json(rows);
 }
 
@@ -22,12 +26,22 @@ const schema = z.object({
   category: z.string().optional(),
   difficulty: z.string().optional(),
   roleId: z.string().optional(),
+  code: z.string().optional(),
+  // "org" = share with everyone, "private" = only me.
+  visibility: z.enum(["org", "private"]).optional(),
 });
 
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return apiError("Unauthorized", 401);
-  const forbidden = requireApiRole(session.user.role, ["admin"]);
+  // Anyone in the org may contribute to the library; visibility controls sharing.
+  const forbidden = requireApiRole(session.user.role, [
+    "admin",
+    "ta",
+    "interviewer",
+    "manager",
+    "hr",
+  ]);
   if (forbidden) return forbidden;
 
   const body = schema.parse(await req.json());
@@ -40,6 +54,9 @@ export async function POST(req: Request) {
     difficulty: body.difficulty ?? "Medium",
     roleId: body.roleId,
     roleIds: body.roleId ? [body.roleId] : [],
+    code: body.code ?? "",
+    visibility: body.visibility ?? "org",
+    createdById: session.user.id,
   });
   return NextResponse.json({ id });
 }
@@ -47,21 +64,28 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const session = await auth();
   if (!session?.user) return apiError("Unauthorized", 401);
-  const forbidden = requireApiRole(session.user.role, ["admin"]);
-  if (forbidden) return forbidden;
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return apiError("id required", 400);
 
-  await db
-    .delete(questions)
+  const [existing] = await db
+    .select()
+    .from(questions)
     .where(
       and(
         eq(questions.id, id),
         eq(questions.organizationId, session.user.organizationId),
       ),
-    );
+    )
+    .limit(1);
+  if (!existing) return apiError("Not found", 404);
 
+  // Admins can remove any question; others only their own.
+  if (session.user.role !== "admin" && existing.createdById !== session.user.id) {
+    return apiError("Forbidden", 403);
+  }
+
+  await db.delete(questions).where(eq(questions.id, id));
   return NextResponse.json({ ok: true });
 }

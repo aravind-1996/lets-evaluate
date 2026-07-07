@@ -3,6 +3,8 @@ import { isPanelRole } from "@/lib/auth/capabilities";
 import {
   getActivityFeed,
   getCandidatesForUser,
+  getInterviewerCounts,
+  getInterviewerHistory,
   getStageAssignmentsForUser,
   getStageBookings,
   getUserStats,
@@ -22,10 +24,11 @@ export default async function PeoplePage() {
   });
 
   if (isPanelRole(session.user.role)) {
-    const rows = await getStageAssignmentsForUser(
-      session.user.organizationId,
-      session.user.id,
-    );
+    const [rows, counts, history] = await Promise.all([
+      getStageAssignmentsForUser(session.user.organizationId, session.user.id),
+      getInterviewerCounts(session.user.organizationId, session.user.id),
+      getInterviewerHistory(session.user.organizationId, session.user.id),
+    ]);
     const assignments = rows.map((r) => ({
       id: r.stage.id,
       status: r.stage.status,
@@ -34,7 +37,24 @@ export default async function PeoplePage() {
       handoffNote: r.stage.handoffNote,
       candidate: { id: r.candidate.id, name: r.candidate.name },
     }));
-    return <InterviewerDashboard assignments={assignments} today={today} />;
+    const historyRows = history.map((h) => ({
+      stageId: h.stageId,
+      label: h.label,
+      decision: h.decision,
+      decidedAt: h.decidedAt ? h.decidedAt.toISOString() : null,
+      candidateId: h.candidateId,
+      candidateName: h.candidateName,
+      roleName: h.roleName ?? null,
+      hasReport: Boolean(h.reportKey),
+    }));
+    return (
+      <InterviewerDashboard
+        assignments={assignments}
+        counts={counts}
+        history={historyRows}
+        today={today}
+      />
+    );
   }
 
   const [candidates, stats, feed, bookings] = await Promise.all([

@@ -7,6 +7,7 @@ import { Pill } from "@/components/Pill";
 import { FieldTextarea } from "@/components/FormField";
 import { cn } from "@/lib/utils";
 import type { ResumeMetrics } from "@/lib/ai";
+import { InterviewWorkspace } from "./InterviewWorkspace";
 
 type Metrics = Partial<ResumeMetrics>;
 
@@ -22,6 +23,7 @@ export type StageView = {
   dueAt: string | null;
   decision: string | null;
   comments: string | null;
+  hasReport: boolean;
 };
 
 export function EvaluateClient({
@@ -357,10 +359,14 @@ export function EvaluateClient({
             )}
           </div>
 
-          {/* Context actions for the current pipeline position (non-screening). */}
+          {/* Interviewer / manager / HR workspace for their active round. */}
           {!showWizard && myActiveStage && (
-            <StageDecisionPanel
-              stage={myActiveStage}
+            <InterviewWorkspace
+              stageId={myActiveStage.id}
+              stageLabel={myActiveStage.label}
+              candidateName={candidateName}
+              role={role}
+              projectName={projectName}
               metrics={metrics}
               onDone={() => {
                 router.push("/assignments");
@@ -383,6 +389,10 @@ export function EvaluateClient({
                 router.refresh();
               }}
             />
+          )}
+
+          {!showWizard && !myActiveStage && !canFinalize && canScreen && (
+            <CompletedRoundsPanel stages={stages} />
           )}
 
           {!showWizard && !myActiveStage && !canFinalize && canScreen && (
@@ -685,70 +695,59 @@ function stageStatusMeta(status: StageView["status"]): {
   return { variant: "neutral", label: "Pending" };
 }
 
-/* ─────────────────────────── Assignee decision ─────────────────────────── */
+/* ─────────────────────── Recruiter: completed rounds ─────────────────────── */
 
-function StageDecisionPanel({
-  stage,
-  metrics,
-  onDone,
-}: {
-  stage: StageView;
-  metrics?: Metrics;
-  onDone: () => void;
-}) {
-  const [comments, setComments] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function decide(decision: "yes" | "no") {
-    if (!comments.trim()) {
-      setError("Please add a short note with your decision.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    const res = await fetch(`/api/stages/${stage.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision, comments }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Could not submit your decision.");
-      return;
-    }
-    onDone();
-  }
+function CompletedRoundsPanel({ stages }: { stages: StageView[] }) {
+  const decided = stages.filter(
+    (s) =>
+      s.kind !== "screening" &&
+      s.kind !== "final" &&
+      (s.status === "passed" || s.status === "failed"),
+  );
+  if (decided.length === 0) return null;
 
   return (
-    <section className="case-card mb-4 border-[var(--orange)] bg-[var(--orange-soft)] p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="font-serif text-xl font-bold">Your round: {stage.label}</h2>
-        <Pill variant="orange">Awaiting your verdict</Pill>
-      </div>
-      {metrics?.tech_match_score != null && (
-        <p className="mt-2 text-sm text-[var(--ink-soft)]">
-          TA screening tech match: {metrics.tech_match_score}%
-        </p>
-      )}
-      <FieldTextarea
-        className="mt-3"
-        value={comments}
-        onChange={(e) => setComments(e.target.value)}
-        placeholder="Interview notes, strengths, concerns…"
-      />
-      {error && (
-        <p className="mt-2 text-xs font-semibold text-red-600">{error}</p>
-      )}
-      <div className="mt-3 flex flex-wrap gap-2">
-        <Button onClick={() => decide("yes")} disabled={busy}>
-          {busy ? "Saving…" : "Yes — proceed to next round"}
-        </Button>
-        <Button variant="ghost" onClick={() => decide("no")} disabled={busy}>
-          No — do not proceed
-        </Button>
-      </div>
+    <section className="case-card mb-4 p-5">
+      <h2 className="font-serif text-xl font-bold">Interview rounds</h2>
+      <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
+        Interviewer comments and their PDF evaluation reports.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {decided.map((s) => {
+          const meta = stageStatusMeta(s.status);
+          return (
+            <li
+              key={s.id}
+              className="rounded-lg border border-[var(--cream-2)] bg-[var(--cream)] px-3 py-2 text-sm"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">{s.label}</span>
+                <Pill variant={meta.variant} className="text-[10px]">
+                  {meta.label}
+                </Pill>
+                {s.assigneeName && (
+                  <span className="text-xs text-[var(--ink-faint)]">
+                    by {s.assigneeName}
+                  </span>
+                )}
+                {s.hasReport && (
+                  <a
+                    href={`/api/stages/${s.id}/report`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-auto text-xs font-semibold text-[var(--cyan-d)] hover:underline"
+                  >
+                    PDF report ↓
+                  </a>
+                )}
+              </div>
+              {s.comments && (
+                <p className="mt-1 text-xs text-[var(--ink-soft)]">“{s.comments}”</p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
@@ -841,6 +840,16 @@ function FinalConfirmationPanel({
                       “{s.comments}”
                     </span>
                   )}
+                  {s.hasReport && (
+                    <a
+                      href={`/api/stages/${s.id}/report`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-semibold text-[var(--cyan-d)] hover:underline"
+                    >
+                      PDF report ↓
+                    </a>
+                  )}
                 </li>
               );
             })}
@@ -871,7 +880,7 @@ function FinalConfirmationPanel({
 
 /* ─────────────────────────── Analysis report ─────────────────────────── */
 
-function AnalysisReport({
+export function AnalysisReport({
   metrics,
   candidateName,
   role,

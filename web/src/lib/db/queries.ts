@@ -112,17 +112,28 @@ export async function getRoleCandidateStats(
   return byRole;
 }
 
+/**
+ * Question library rows visible to a user: everything shared with the whole org
+ * ("org" visibility) plus the user's own private questions. Optionally filtered
+ * by role.
+ */
 export async function getOrgQuestions(
   organizationId: string,
   roleId?: string,
+  userId?: string,
 ) {
   const rows = await db
     .select()
     .from(questions)
     .where(eq(questions.organizationId, organizationId))
-    .orderBy(questions.createdAt);
-  if (!roleId) return rows;
-  return rows.filter(
+    .orderBy(desc(questions.createdAt));
+
+  const visible = rows.filter(
+    (q) => q.visibility !== "private" || (userId && q.createdById === userId),
+  );
+
+  if (!roleId) return visible;
+  return visible.filter(
     (q) =>
       q.roleId === roleId ||
       (q.roleIds as string[] | null)?.includes(roleId),
@@ -644,6 +655,94 @@ export async function getStageBookings(organizationId: string) {
     .leftJoin(users, eq(candidateStages.assignedToId, users.id))
     .where(eq(candidateStages.organizationId, organizationId))
     .orderBy(desc(candidateStages.dueAt));
+}
+
+/**
+ * Rounds a panel member has decided (their interview history / exports),
+ * newest first, enriched with candidate and role/project names.
+ */
+export async function getInterviewerHistory(
+  organizationId: string,
+  userId: string,
+) {
+  return db
+    .select({
+      stageId: candidateStages.id,
+      label: candidateStages.label,
+      kind: candidateStages.kind,
+      decision: candidateStages.decision,
+      decidedAt: candidateStages.decidedAt,
+      comments: candidateStages.comments,
+      reportKey: candidateStages.reportKey,
+      reportFilename: candidateStages.reportFilename,
+      candidateId: candidateStages.candidateId,
+      candidateName: candidates.name,
+      roleName: roles.name,
+      projectName: projects.name,
+    })
+    .from(candidateStages)
+    .innerJoin(candidates, eq(candidateStages.candidateId, candidates.id))
+    .leftJoin(roles, eq(candidates.roleId, roles.id))
+    .leftJoin(projects, eq(candidates.projectId, projects.id))
+    .where(
+      and(
+        eq(candidateStages.organizationId, organizationId),
+        eq(candidateStages.decidedById, userId),
+      ),
+    )
+    .orderBy(desc(candidateStages.decidedAt));
+}
+
+export type PeriodCounts = {
+  today: number;
+  month: number;
+  quarter: number;
+  year: number;
+  total: number;
+};
+
+/** How many interviews a panel member has completed across time windows. */
+export async function getInterviewerCounts(
+  organizationId: string,
+  userId: string,
+): Promise<PeriodCounts> {
+  const rows = await db
+    .select({ decidedAt: candidateStages.decidedAt })
+    .from(candidateStages)
+    .where(
+      and(
+        eq(candidateStages.organizationId, organizationId),
+        eq(candidateStages.decidedById, userId),
+      ),
+    );
+
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfQuarter = new Date(
+    now.getFullYear(),
+    Math.floor(now.getMonth() / 3) * 3,
+    1,
+  );
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+  const counts: PeriodCounts = {
+    today: 0,
+    month: 0,
+    quarter: 0,
+    year: 0,
+    total: 0,
+  };
+  for (const r of rows) {
+    if (!r.decidedAt) continue;
+    const d = new Date(r.decidedAt);
+    counts.total += 1;
+    if (d >= startOfYear) counts.year += 1;
+    if (d >= startOfQuarter) counts.quarter += 1;
+    if (d >= startOfMonth) counts.month += 1;
+    if (d >= startOfDay) counts.today += 1;
+  }
+  return counts;
 }
 
 /** Active stages assigned to a specific panel member (their queue). */

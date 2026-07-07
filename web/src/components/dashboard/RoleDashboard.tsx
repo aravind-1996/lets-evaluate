@@ -281,8 +281,21 @@ export function TeamDashboard({
   );
 }
 
+type HistoryRow = {
+  stageId: string;
+  label: string;
+  decision: string | null;
+  decidedAt: string | null;
+  candidateId: string;
+  candidateName: string;
+  roleName: string | null;
+  hasReport: boolean;
+};
+
 export function InterviewerDashboard({
   assignments,
+  counts,
+  history = [],
   today,
 }: {
   assignments: {
@@ -293,12 +306,24 @@ export function InterviewerDashboard({
     handoffNote: string | null;
     candidate: { id: string; name: string };
   }[];
+  counts?: {
+    today: number;
+    month: number;
+    quarter: number;
+    year: number;
+    total: number;
+  };
+  history?: HistoryRow[];
   today: string;
 }) {
   const pending = assignments.filter((a) => a.status === "active");
-  const completed = assignments.filter((a) =>
-    ["passed", "failed"].includes(a.status),
-  );
+  const period = counts ?? {
+    today: 0,
+    month: 0,
+    quarter: 0,
+    year: 0,
+    total: 0,
+  };
 
   return (
     <CabinetPage
@@ -314,7 +339,7 @@ export function InterviewerDashboard({
         <div>
           <h2 className="font-serif text-xl font-bold">Your interview queue</h2>
           <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-            Candidates assigned to you for technical interviews
+            Candidates assigned to you for interviews
           </p>
         </div>
         <div className="font-serif text-[3.5rem] leading-none text-[var(--cyan-d)] opacity-30">
@@ -322,11 +347,85 @@ export function InterviewerDashboard({
         </div>
       </div>
 
+      <section className="mb-5">
+        <h2 className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--ink-faint)]">
+          Interviews completed
+        </h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <StatBlock label="Today" value={period.today} icon="☀" />
+          <StatBlock label="This month" value={period.month} icon="◔" />
+          <StatBlock label="This quarter" value={period.quarter} icon="◑" />
+          <StatBlock label="This year" value={period.year} icon="◕" />
+          <StatBlock
+            label="All time"
+            value={period.total}
+            icon="✓"
+            className="hidden md:block"
+          />
+        </div>
+      </section>
+
       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3">
         <StatBlock label="Pending" value={pending.length} icon="◎" />
-        <StatBlock label="Completed" value={completed.length} icon="✓" />
+        <StatBlock label="Completed" value={period.total} icon="✓" />
         <StatBlock label="Total assigned" value={assignments.length} icon="📋" />
       </div>
+
+      {history.length > 0 && (
+        <section className="mb-5">
+          <CasePanel title="History & exports">
+            {history.slice(0, 10).map((h) => (
+              <div key={h.stageId} className="case-row">
+                <strong>{h.candidateName}</strong>
+                <span className="truncate text-[var(--ink-soft)]">
+                  {h.label}
+                  {h.roleName ? ` · ${h.roleName}` : ""}
+                  {h.decidedAt
+                    ? ` · ${new Date(h.decidedAt).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}`
+                    : ""}
+                </span>
+                <Pill
+                  variant={
+                    h.decision === "yes"
+                      ? "green"
+                      : h.decision === "no"
+                        ? "orange"
+                        : "neutral"
+                  }
+                >
+                  {h.decision === "yes"
+                    ? "Passed"
+                    : h.decision === "no"
+                      ? "Not selected"
+                      : "Reviewed"}
+                </Pill>
+                {h.hasReport ? (
+                  <a
+                    href={`/api/stages/${h.stageId}/report`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1 text-[11px] font-semibold text-[var(--cyan-d)] hover:underline"
+                  >
+                    PDF ↓
+                  </a>
+                ) : (
+                  <ButtonLink
+                    href={`/evaluate/${h.candidateId}`}
+                    variant="ghost"
+                    className="px-3 py-1 text-[11px]"
+                  >
+                    Open
+                  </ButtonLink>
+                )}
+              </div>
+            ))}
+          </CasePanel>
+        </section>
+      )}
 
       <CasePanel title="Upcoming interviews">
         {assignments.length === 0 ? (

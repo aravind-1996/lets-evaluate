@@ -427,6 +427,141 @@ Requirements: ${roleRequirements.slice(0, MAX_ROLE / 2)}`;
   return Array.isArray(result) ? result : [];
 }
 
+/* ─────────────────────── Interviewer question categories ─────────────────────── */
+
+export type QuestionCategory =
+  | "Resume based"
+  | "Backend"
+  | "Frontend"
+  | "Architecture"
+  | "Scenario based"
+  | "Code error spotting"
+  | "Refactoring";
+
+export const QUESTION_CATEGORIES: {
+  id: QuestionCategory;
+  label: string;
+  hint: string;
+  /** Whether questions in this category are expected to include a code snippet. */
+  code: boolean;
+}[] = [
+  { id: "Resume based", label: "Resume based", hint: "Probe claims made in the candidate's resume", code: false },
+  { id: "Backend", label: "Backend", hint: "APIs, databases, concurrency, performance", code: false },
+  { id: "Frontend", label: "Frontend", hint: "UI, state, rendering, accessibility", code: false },
+  { id: "Architecture", label: "Architecture", hint: "System & solution design trade-offs", code: false },
+  { id: "Scenario based", label: "Scenario based", hint: "Real-world situational problem solving", code: false },
+  { id: "Code error spotting", label: "Find errors in code", hint: "Snippets with bugs to identify", code: true },
+  { id: "Refactoring", label: "Refactoring techniques", hint: "Snippets to improve / refactor", code: true },
+];
+
+export type GeneratedQuestion = {
+  question: string;
+  category: string;
+  difficulty: string;
+  code: string;
+  expected_answer_hints: string;
+};
+
+export type CategoryQuestionContext = {
+  roleName?: string;
+  techStack?: string[];
+  resumeText?: string;
+  roleRequirements?: string;
+};
+
+/**
+ * Generate interview questions for a specific category. Code-oriented
+ * categories return a `code` snippet; others leave it empty.
+ */
+export async function generateCategoryQuestions(
+  category: QuestionCategory,
+  ctx: CategoryQuestionContext,
+  count = 5,
+): Promise<GeneratedQuestion[]> {
+  const openai = client();
+  if (!openai) {
+    return [
+      {
+        question: "OpenAI API key not configured",
+        category,
+        difficulty: "Medium",
+        code: "",
+        expected_answer_hints: "N/A",
+      },
+    ];
+  }
+
+  const role = ctx.roleName?.trim() || "the role";
+  const tech = (ctx.techStack ?? []).join(", ") || "the relevant stack";
+  const wantsCode =
+    category === "Code error spotting" || category === "Refactoring";
+
+  const guidance: Record<QuestionCategory, string> = {
+    "Resume based": `Base each question on concrete claims, projects and technologies from the candidate's resume below so the interviewer can verify real, hands-on depth.\n\nResume:\n${(ctx.resumeText ?? "").slice(0, MAX_RESUME_Q)}`,
+    Backend: "Focus on backend engineering: API design, data modelling, transactions, caching, concurrency, scaling and debugging production issues.",
+    Frontend: "Focus on frontend engineering: component design, state management, rendering/performance, accessibility, browser behaviour and testing.",
+    Architecture: "Focus on system and solution architecture: trade-offs, scalability, reliability, data flow, and technology selection with justification.",
+    "Scenario based": "Pose realistic on-the-job situations (incidents, ambiguous requirements, tight deadlines, cross-team conflicts) that reveal judgement and problem solving.",
+    "Code error spotting": "For each item, include a short, realistic code snippet (in the candidate's primary language/stack) that contains one or more bugs. The question asks the candidate to find and explain the errors.",
+    Refactoring: "For each item, include a short code snippet that works but has poor quality (duplication, bad naming, tight coupling, inefficiency). The question asks how the candidate would refactor it.",
+  };
+
+  const prompt = `You are helping an interviewer prepare ${count} "${category}" interview questions for ${role}. Tech stack: ${tech}.
+${guidance[category]}
+${ctx.roleRequirements?.trim() ? `\nRole requirements:\n${ctx.roleRequirements.slice(0, MAX_ROLE)}` : ""}
+
+Return ONLY a valid JSON array of exactly ${count} objects, each with keys:
+- "question" (string): the interview question.
+- "difficulty" (string): one of "Easy", "Medium", "Hard".
+- "code" (string): ${wantsCode ? "the code snippet the question refers to (use \\n for newlines). Required." : 'leave as an empty string "".'}
+- "expected_answer_hints" (string): concise notes on what a strong answer covers.`;
+
+  try {
+    const res = await openai.chat.completions.create({
+      model: defaultModel(),
+      temperature: 0.6,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            'You generate practical, role-relevant interview questions and return strict JSON. When code is requested, produce compilable-looking, realistic snippets. Respond with a JSON object shaped as {"questions": [...]}.',
+        },
+        { role: "user", content: prompt },
+      ],
+    });
+    const raw = res.choices[0]?.message?.content ?? "{}";
+    const parsed = parseJson<
+      { questions?: unknown[] } | unknown[]
+    >(raw);
+    const arr = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.questions)
+        ? parsed.questions
+        : [];
+    return arr.map((q) => {
+      const o = (q ?? {}) as Record<string, unknown>;
+      return {
+        question: String(o.question ?? "").trim(),
+        category,
+        difficulty: String(o.difficulty ?? "Medium").trim() || "Medium",
+        code: String(o.code ?? "").trim(),
+        expected_answer_hints: String(o.expected_answer_hints ?? "").trim(),
+      };
+    }).filter((q) => q.question);
+  } catch (e) {
+    return [
+      {
+        question: `Could not generate questions: ${e instanceof Error ? e.message : String(e)}`,
+        category,
+        difficulty: "Medium",
+        code: "",
+        expected_answer_hints: "",
+      },
+    ];
+  }
+}
+
 export async function refineEvaluationNotes(notes: string) {
   const openai = client();
   if (!openai || !notes.trim()) return notes;

@@ -221,6 +221,11 @@ export const candidateStages = pgTable(
     handoffNote: text("handoff_note").default(""),
     decision: text("decision"),
     comments: text("comments").default(""),
+    /** The interviewer's worked question set for this round (with satisfaction + notes). */
+    questions: jsonb("questions").$type<unknown[]>().default([]),
+    /** Storage key + filename of the auto-generated PDF evaluation report. */
+    reportKey: text("report_key"),
+    reportFilename: text("report_filename"),
     decidedById: text("decided_by_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -249,13 +254,24 @@ export const questions = pgTable(
     roleId: text("role_id").references(() => roles.id, { onDelete: "set null" }),
     questionText: text("question_text").notNull(),
     category: text("category").default("Technical"),
+    /** Severity band for severity-wise segregation (Easy | Medium | Hard). */
     difficulty: text("difficulty").default("Medium"),
     roleIds: jsonb("role_ids").$type<string[]>().default([]),
+    /** "org" = visible to everyone in the org; "private" = only the creator. */
+    visibility: text("visibility").default("org").notNull(),
+    /** Optional code snippet for code-error/refactoring style questions. */
+    code: text("code").default(""),
+    createdById: text("created_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
-  (t) => [index("questions_org_idx").on(t.organizationId)],
+  (t) => [
+    index("questions_org_idx").on(t.organizationId),
+    index("questions_creator_idx").on(t.createdById),
+  ],
 );
 
 export const candidates = pgTable(

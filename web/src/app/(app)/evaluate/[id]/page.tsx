@@ -69,6 +69,7 @@ export default async function EvaluatePage({ params }: Params) {
     dueAt: s.stage.dueAt ? s.stage.dueAt.toISOString() : null,
     decision: s.stage.decision ?? null,
     comments: s.stage.comments ?? null,
+    hasReport: Boolean(s.stage.reportKey),
   }));
 
   const myActiveStageId =
