@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AuthFrame } from "@/components/AuthFrame";
+import { useBrand } from "@/components/BrandContext";
 import { Button } from "@/components/Button";
 import { FieldInput, FieldLabel } from "@/components/FormField";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const brand = useBrand();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -55,7 +57,7 @@ export default function RegisterPage() {
             id="reg-email"
             required
             type="email"
-            placeholder="you@kanini.com"
+            placeholder={brand.emailPlaceholder}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />

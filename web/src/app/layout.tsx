@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Fraunces, Work_Sans } from "next/font/google";
+import { BrandTheme } from "@/components/BrandTheme";
 import { Providers } from "@/components/Providers";
+import { getBrand } from "@/lib/brand";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -15,9 +17,12 @@ const workSans = Work_Sans({
   weight: ["400", "500", "600", "700"],
 });
 
+const brand = getBrand();
+
 export const metadata: Metadata = {
-  title: "Let's Evaluate — KANINI",
-  description: "AI-assisted technical hiring. People first.",
+  title: `${brand.appTitle} — ${brand.orgName}`,
+  description: brand.description,
+  ...(brand.faviconUrl ? { icons: { icon: brand.faviconUrl } } : {}),
 };
 
 export default function RootLayout({
@@ -25,8 +30,11 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${fraunces.variable} ${workSans.variable}`}>
+      <head>
+        <BrandTheme />
+      </head>
       <body className="min-h-screen antialiased">
-        <Providers>{children}</Providers>
+        <Providers brand={brand}>{children}</Providers>
       </body>
     </html>
   );

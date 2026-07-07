@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ButtonLink } from "@/components/Button";
 import { DossierPreview } from "@/components/landing/DossierPreview";
 import { LandingNav } from "@/components/landing/LandingNav";
+import { getBrand } from "@/lib/brand";
 
 const workflow = [
   {
@@ -27,6 +28,8 @@ const workflow = [
 ];
 
 export default function HomePage() {
+  const brand = getBrand();
+
   return (
     <main className="min-h-screen bg-[var(--cream)]">
       <div className="bg-[var(--navy)] py-2.5 text-center text-[11px] font-semibold tracking-wide text-white/80">
@@ -112,8 +115,9 @@ export default function HomePage() {
           ))}
         </div>
         <p className="border-t border-white/10 py-5 text-center text-xs text-white/40">
-          Built for <span className="font-bold text-[var(--cyan)]">KANINI</span> teams ·
-          Intellect · Energy · Integrity
+          Built for{" "}
+          <span className="font-bold text-[var(--cyan)]">{brand.orgName}</span> teams ·{" "}
+          {brand.tagline}
         </p>
       </section>
 
@@ -122,7 +126,7 @@ export default function HomePage() {
           Sign in
         </Link>
         {" · "}
-        © 2026 KANINI Software Solutions
+        {brand.copyright}
       </footer>
     </main>
   );

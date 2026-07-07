@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/Button";
 import { FieldInput, FieldLabel } from "@/components/FormField";
 
-export function LoginForm() {
+export function LoginForm({ emailPlaceholder }: { emailPlaceholder: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const callbackUrl = params.get("callbackUrl") ?? "/people";
@@ -43,7 +43,7 @@ export function LoginForm() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@kanini.com"
+          placeholder={emailPlaceholder}
           autoComplete="email"
         />
       </div>

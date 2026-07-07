@@ -1,4 +1,4 @@
-/* KANINI design tokens — case file system */
+/* Default design tokens — overridden at runtime by BrandTheme from .env */
 :root {
   --cyan: #23b0e6;
   --cyan-d: #1c8db8;

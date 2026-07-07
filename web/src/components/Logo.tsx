@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useBrand } from "@/components/BrandContext";
 import { cn } from "@/lib/utils";
 
 export function LogoMark({ className }: { className?: string }) {
@@ -37,16 +40,37 @@ export function Logo({
   light?: boolean;
   className?: string;
 }) {
+  const brand = useBrand();
+  const titlePrefix = brand.appTitleAccent
+    ? brand.appTitle.replace(brand.appTitleAccent, "").trimEnd()
+    : brand.appTitle;
+
   return (
     <Link href={href} className={cn("flex items-center gap-3 no-underline", className)}>
-      <LogoMark className={light ? "bg-[var(--cyan)]" : undefined} />
+      {brand.logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={brand.logoUrl}
+          alt={brand.appTitle}
+          className="h-10 w-auto shrink-0 object-contain"
+        />
+      ) : (
+        <LogoMark className={light ? "bg-[var(--cyan)]" : undefined} />
+      )}
       <span
         className={cn(
           "font-serif text-[1.2rem] leading-none",
           light ? "text-white" : "text-[var(--ink)]",
         )}
       >
-        Let&apos;s <em className="text-[var(--cyan-d)] not-italic">Evaluate</em>
+        {brand.appTitleAccent ? (
+          <>
+            {titlePrefix}{" "}
+            <em className="text-[var(--cyan-d)] not-italic">{brand.appTitleAccent}</em>
+          </>
+        ) : (
+          brand.appTitle
+        )}
       </span>
     </Link>
   );
