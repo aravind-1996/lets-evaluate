@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth/rbac";
 import { getCandidatesForUser } from "@/lib/db/queries";
 import { FaceAvatar } from "@/components/FaceAvatar";
 import { Pill } from "@/components/Pill";
+import { CabinetPage, CaseCard } from "@/components/CabinetPage";
 import Link from "next/link";
 
 export default async function PipelinePage() {
@@ -16,21 +17,19 @@ export default async function PipelinePage() {
     { key: "screening", label: "Screening", statuses: ["draft", "screening", "screened_hold"] },
     { key: "ready", label: "Ready", statuses: ["ready_for_interview"] },
     { key: "interview", label: "Interview", statuses: ["assigned", "interview_in_progress"] },
-    { key: "done", label: "Decided", statuses: ["selected", "rejected", "hold", "screened_rejected"] },
+    {
+      key: "done",
+      label: "Decided",
+      statuses: ["selected", "rejected", "hold", "screened_rejected"],
+    },
   ];
 
   return (
-    <main className="px-7 py-8">
-      <h1 className="font-serif text-2xl font-bold">Team pipeline</h1>
-      <p className="mt-1 text-sm text-[var(--ink-faint)]">
-        Full visibility for the TA team
-      </p>
-      <div className="mt-8 grid gap-4 md:grid-cols-4">
+    <CabinetPage title="Team pipeline" subtitle="Full visibility for the TA team">
+      <div className="grid gap-4 md:grid-cols-4">
         {columns.map((col) => (
-          <div key={col.key} className="rounded-2xl bg-white p-4">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--ink-faint)]">
-              {col.label}
-            </h2>
+          <CaseCard key={col.key} className="p-4">
+            <h2 className="case-label">{col.label}</h2>
             <ul className="mt-3 space-y-2">
               {candidates
                 .filter((c) => col.statuses.includes(c.status))
@@ -38,11 +37,11 @@ export default async function PipelinePage() {
                   <li key={c.id}>
                     <Link
                       href={`/evaluate/${c.id}`}
-                      className="block rounded-xl bg-[var(--cream)] p-3 hover:bg-[var(--cyan-soft)]"
+                      className="block rounded-lg bg-[var(--cream)] p-3 no-underline transition-colors hover:bg-[var(--cyan-soft)]"
                     >
                       <div className="flex items-center gap-2">
                         <FaceAvatar name={c.name} size="sm" />
-                        <strong className="text-sm">{c.name}</strong>
+                        <strong className="text-sm text-[var(--ink)]">{c.name}</strong>
                       </div>
                       <Pill variant="neutral" className="mt-2 text-[10px]">
                         {c.status.replace(/_/g, " ")}
@@ -51,9 +50,9 @@ export default async function PipelinePage() {
                   </li>
                 ))}
             </ul>
-          </div>
+          </CaseCard>
         ))}
       </div>
-    </main>
+    </CabinetPage>
   );
 }

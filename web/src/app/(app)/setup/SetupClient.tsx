@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
+import { CabinetPage, CaseCard } from "@/components/CabinetPage";
+import { FieldInput, FieldSelect, FieldTextarea } from "@/components/FormField";
 
 type Project = {
   id: string;
@@ -23,6 +25,8 @@ type Question = {
   category: string | null;
   difficulty: string | null;
 };
+
+const folderColors = ["bg-[var(--cyan)]", "bg-[var(--green)]", "bg-[var(--navy)]"];
 
 export function SetupClient({ projects }: { projects: Project[] }) {
   const router = useRouter();
@@ -100,20 +104,39 @@ export function SetupClient({ projects }: { projects: Project[] }) {
   }
 
   return (
-    <main className="px-7 py-6">
-      <h1 className="font-serif text-2xl font-bold">Your team&apos;s toolkit</h1>
-      <p className="mt-1 text-sm text-[var(--ink-faint)]">Projects, roles &amp; questions</p>
+    <CabinetPage
+      title="Project files"
+      subtitle="Configure hiring context once — reuse everywhere"
+      actions={
+        tab === "projects" ? (
+          <Button className="px-5 py-2 text-[13px]" onClick={() => setTab("projects")}>
+            + New project
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className="case-banner mb-5">
+        <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-[var(--cyan)] text-white text-xl font-bold">
+          +
+        </div>
+        <div>
+          <h2 className="font-serif text-xl font-bold">Configure once, evaluate forever</h2>
+          <p className="mt-1 text-[13px] text-white/65">
+            Each project file contains roles, tech stacks, and a reusable question bank
+          </p>
+        </div>
+      </div>
 
-      <div className="mt-6 flex gap-2">
+      <div className="mb-6 flex gap-2 border-b border-[var(--cream-2)] pb-4">
         {(["projects", "roles", "questions"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`rounded-full px-4 py-2 text-xs font-bold capitalize ${
+            className={`rounded-full px-4 py-2 text-xs font-bold capitalize transition-colors ${
               tab === t
                 ? "bg-[var(--cyan)] text-white"
-                : "bg-white text-[var(--ink-soft)]"
+                : "bg-white text-[var(--ink-soft)] hover:bg-[var(--cream-2)]"
             }`}
           >
             {t}
@@ -123,37 +146,51 @@ export function SetupClient({ projects }: { projects: Project[] }) {
 
       {tab === "projects" && (
         <>
-          <div className="mt-8 space-y-3">
-            {projects.map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center gap-4 rounded-[22px] border-2 border-transparent bg-white p-5 hover:border-[var(--cyan-soft)]"
-              >
-                <div className="grid size-[52px] place-items-center rounded-2xl bg-[var(--cyan-soft)] text-sm font-extrabold text-[var(--cyan-d)]">
-                  {p.name.slice(0, 2).toUpperCase()}
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-bold">{p.name}</h3>
-                  <p className="text-xs text-[var(--ink-faint)]">
-                    {(p.techStack ?? []).join(" · ") || "No tech stack"}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {projects.map((p, i) => (
+              <article key={p.id} className="case-card case-card-hover overflow-hidden">
+                <div
+                  className={`case-folder-tab ${folderColors[i % folderColors.length]}`}
+                />
+                <div className="border-t border-[var(--cream-2)] p-5 pt-6">
+                  <h3 className="font-serif text-lg font-bold">{p.name}</h3>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {(p.techStack ?? []).map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded border border-[var(--cream-2)] bg-[var(--cream)] px-2 py-0.5 text-[10px] font-semibold"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs text-[var(--ink-faint)]">
+                    {(p.techStack ?? []).join(" · ") || "No tech stack configured"}
                   </p>
                 </div>
-              </div>
+              </article>
             ))}
+            <button
+              type="button"
+              onClick={() => document.getElementById("add-project")?.scrollIntoView({ behavior: "smooth" })}
+              className="flex min-h-[180px] items-center justify-center rounded-xl border-2 border-dashed border-[var(--cream-2)] text-sm font-semibold text-[var(--ink-faint)] transition-colors hover:border-[var(--cyan)] hover:text-[var(--cyan-d)]"
+            >
+              + New project file
+            </button>
           </div>
-          <div className="mt-8 rounded-[22px] border-2 border-dashed border-[var(--cream-2)] p-6">
+          <div id="add-project" className="case-card mt-6 p-6">
             <h3 className="font-bold">Add project</h3>
-            <input
+            <FieldInput
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Project name"
-              className="mt-3 w-full rounded-xl border px-3 py-2 text-sm"
+              className="mt-3"
             />
-            <input
+            <FieldInput
               value={stack}
               onChange={(e) => setStack(e.target.value)}
               placeholder="Tech stack (comma-separated)"
-              className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+              className="mt-2"
             />
             <Button className="mt-3" onClick={addProject} disabled={loading || !name}>
               Save project
@@ -164,28 +201,28 @@ export function SetupClient({ projects }: { projects: Project[] }) {
 
       {tab === "roles" && (
         <>
-          <div className="mt-8 space-y-3">
+          <div className="space-y-3">
             {roles.map((r) => (
-              <div key={r.id} className="rounded-[22px] bg-white p-5">
+              <CaseCard key={r.id} className="p-5">
                 <h3 className="font-bold">{r.name}</h3>
-                <p className="text-xs text-[var(--ink-faint)]">
+                <p className="mt-1 text-xs text-[var(--ink-faint)]">
                   {r.requirements || "No requirements"}
                 </p>
-              </div>
+              </CaseCard>
             ))}
           </div>
-          <div className="mt-8 rounded-[22px] border-2 border-dashed border-[var(--cream-2)] p-6">
+          <CaseCard className="mt-6 p-6">
             <h3 className="font-bold">Add role</h3>
-            <input
+            <FieldInput
               value={roleName}
               onChange={(e) => setRoleName(e.target.value)}
               placeholder="Role name"
-              className="mt-3 w-full rounded-xl border px-3 py-2 text-sm"
+              className="mt-3"
             />
-            <select
+            <FieldSelect
               value={roleProjectId}
               onChange={(e) => setRoleProjectId(e.target.value)}
-              className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+              className="mt-2"
             >
               <option value="">Link to project (optional)</option>
               {projects.map((p) => (
@@ -193,44 +230,44 @@ export function SetupClient({ projects }: { projects: Project[] }) {
                   {p.name}
                 </option>
               ))}
-            </select>
-            <textarea
+            </FieldSelect>
+            <FieldTextarea
               value={roleReqs}
               onChange={(e) => setRoleReqs(e.target.value)}
               placeholder="Requirements"
-              className="mt-2 min-h-[80px] w-full rounded-xl border px-3 py-2 text-sm"
+              className="mt-2"
             />
             <Button className="mt-3" onClick={addRole} disabled={loading || !roleName}>
               Save role
             </Button>
-          </div>
+          </CaseCard>
         </>
       )}
 
       {tab === "questions" && (
         <>
-          <div className="mt-8 space-y-3">
+          <div className="space-y-3">
             {questions.map((q) => (
-              <div key={q.id} className="rounded-[22px] bg-white p-5 text-sm">
+              <CaseCard key={q.id} className="p-5 text-sm">
                 {q.questionText}
                 <p className="mt-1 text-xs text-[var(--ink-faint)]">
                   {q.category} · {q.difficulty}
                 </p>
-              </div>
+              </CaseCard>
             ))}
           </div>
-          <div className="mt-8 rounded-[22px] border-2 border-dashed border-[var(--cream-2)] p-6">
+          <CaseCard className="mt-6 p-6">
             <h3 className="font-bold">Add question</h3>
-            <textarea
+            <FieldTextarea
               value={qText}
               onChange={(e) => setQText(e.target.value)}
               placeholder="Question text"
-              className="mt-3 min-h-[80px] w-full rounded-xl border px-3 py-2 text-sm"
+              className="mt-3"
             />
-            <select
+            <FieldSelect
               value={qRoleId}
               onChange={(e) => setQRoleId(e.target.value)}
-              className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+              className="mt-2"
             >
               <option value="">Any role</option>
               {roles.map((r) => (
@@ -238,13 +275,13 @@ export function SetupClient({ projects }: { projects: Project[] }) {
                   {r.name}
                 </option>
               ))}
-            </select>
+            </FieldSelect>
             <Button className="mt-3" onClick={addQuestion} disabled={loading || !qText}>
               Save question
             </Button>
-          </div>
+          </CaseCard>
         </>
       )}
-    </main>
+    </CabinetPage>
   );
 }

@@ -1,4 +1,4 @@
-import { FloatingDock } from "@/components/FloatingDock";
+import { CabinetShell } from "@/components/CabinetShell";
 import { requireSession } from "@/lib/auth/rbac";
 
 export default async function AppLayout({
@@ -6,11 +6,10 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  await requireSession();
+  const session = await requireSession();
   return (
-    <div className="min-h-screen pb-24">
+    <CabinetShell userName={session.user.name} userRole={session.user.role}>
       {children}
-      <FloatingDock />
-    </div>
+    </CabinetShell>
   );
 }

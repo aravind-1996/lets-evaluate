@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/Button";
+import { CabinetPage, CaseCard } from "@/components/CabinetPage";
+import { FieldInput, FieldSelect } from "@/components/FormField";
 
 type Project = { id: string; name: string };
 type Role = { id: string; name: string; projectId: string | null };
@@ -51,56 +53,57 @@ export function NewCandidateClient() {
   }
 
   return (
-    <form onSubmit={submit} className="mt-6 max-w-md space-y-3 rounded-2xl bg-white p-6">
-      <input
-        required
-        placeholder="Candidate name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        className="w-full rounded-xl border px-3 py-2 text-sm"
-      />
-      <input
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="w-full rounded-xl border px-3 py-2 text-sm"
-      />
-      <select
-        value={projectId}
-        onChange={(e) => {
-          setProjectId(e.target.value);
-          setRoleId("");
-        }}
-        className="w-full rounded-xl border px-3 py-2 text-sm"
-      >
-        <option value="">Select project (optional)</option>
-        {projects.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
-      <select
-        value={roleId}
-        onChange={(e) => setRoleId(e.target.value)}
-        className="w-full rounded-xl border px-3 py-2 text-sm"
-      >
-        <option value="">Select role (optional)</option>
-        {roles.map((r) => (
-          <option key={r.id} value={r.id}>
-            {r.name}
-          </option>
-        ))}
-      </select>
-      <input
-        type="file"
-        accept=".pdf,.docx"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        className="w-full text-sm"
-      />
-      <Button type="submit" disabled={loading}>
-        Start screening
-      </Button>
+    <form onSubmit={submit}>
+      <CaseCard className="max-w-lg p-6">
+        <h2 className="font-serif text-lg font-bold">Open a new case file</h2>
+        <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
+          Candidate details and resume evidence
+        </p>
+        <div className="mt-5 space-y-3">
+          <FieldInput
+            required
+            placeholder="Candidate name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <FieldInput
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <FieldSelect
+            value={projectId}
+            onChange={(e) => {
+              setProjectId(e.target.value);
+              setRoleId("");
+            }}
+          >
+            <option value="">Select project (optional)</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </FieldSelect>
+          <FieldSelect value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+            <option value="">Select role (optional)</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </FieldSelect>
+          <input
+            type="file"
+            accept=".pdf,.docx"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="w-full text-sm"
+          />
+          <Button type="submit" disabled={loading} className="w-full">
+            {loading ? "Opening…" : "Open case file →"}
+          </Button>
+        </div>
+      </CaseCard>
     </form>
   );
 }

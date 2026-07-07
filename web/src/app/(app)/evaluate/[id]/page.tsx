@@ -3,6 +3,7 @@ import { getCandidateDetail } from "@/lib/db/queries";
 import { notFound } from "next/navigation";
 import { EvaluateClient } from "./EvaluateClient";
 import { NewCandidateClient } from "./NewCandidateClient";
+import { CabinetPage } from "@/components/CabinetPage";
 import { db } from "@/lib/db";
 import { roles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -15,13 +16,13 @@ export default async function EvaluatePage({ params }: Params) {
 
   if (id === "new") {
     return (
-      <main className="px-7 py-8">
-        <h1 className="font-serif text-2xl font-bold">New evaluation</h1>
-        <p className="mt-2 text-sm text-[var(--ink-soft)]">
-          Upload a resume and start TA screening.
-        </p>
+      <CabinetPage
+        title="New case file"
+        subtitle="Upload a resume and start TA screening"
+        bodyClassName="case-fade-in"
+      >
         <NewCandidateClient />
-      </main>
+      </CabinetPage>
     );
   }
 

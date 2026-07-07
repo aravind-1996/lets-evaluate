@@ -1,22 +1,12 @@
 import { FaceAvatar } from "./FaceAvatar";
 import { Pill } from "./Pill";
-import Link from "next/link";
+import { cn } from "@/lib/utils";
 
-type PolaroidCardProps = {
-  name: string;
-  meta: string;
-  decision: "selected" | "hold" | "rejected" | "neutral";
-  date: string;
-  pdfHref?: string;
-};
-
-const photoStyles = {
-  selected:
-    "bg-gradient-to-br from-[var(--green-soft)] to-[#c5e8a8] text-[var(--green)]",
-  hold: "bg-gradient-to-br from-[var(--orange-soft)] to-[#f5d4b0] text-[var(--orange)]",
-  rejected: "bg-gradient-to-br from-[#fde8e8] to-[#f5b8b8] text-[#c53030]",
-  neutral:
-    "bg-gradient-to-br from-[var(--cyan-soft)] to-[#b8e4f5] text-[var(--cyan-d)]",
+const spineColors = {
+  selected: "bg-[var(--green)]",
+  hold: "bg-[var(--orange)]",
+  rejected: "bg-red-500",
+  neutral: "bg-[var(--cyan)]",
 };
 
 const pillVariant = {
@@ -26,12 +16,22 @@ const pillVariant = {
   neutral: "cyan" as const,
 };
 
+type PolaroidCardProps = {
+  name: string;
+  meta: string;
+  decision: "selected" | "hold" | "rejected" | "neutral";
+  date: string;
+  pdfHref?: string;
+  className?: string;
+};
+
 export function PolaroidCard({
   name,
   meta,
   decision,
   date,
   pdfHref = "#",
+  className,
 }: PolaroidCardProps) {
   const label =
     decision === "selected"
@@ -39,34 +39,43 @@ export function PolaroidCard({
       : decision === "hold"
         ? "Hold"
         : decision === "rejected"
-          ? "Passed"
-          : "Shortlisted";
+          ? "Rejected"
+          : "Shortlist";
 
   return (
-    <article className="cursor-pointer bg-white p-3.5 pb-5 shadow-[0_4px_20px_rgba(41,41,41,.08)] transition-transform hover:scale-[1.04] even:rotate-[1.5deg] odd:-rotate-2">
-      <div
-        className={`mb-3.5 flex aspect-square items-center justify-center rounded font-serif text-5xl font-extrabold ${photoStyles[decision]}`}
-      >
-        <FaceAvatar name={name} size="xl" className="ring-0" />
+    <article
+      className={cn(
+        "case-card case-card-hover cursor-pointer overflow-hidden transition-transform",
+        className,
+      )}
+    >
+      <div className={cn("h-2", spineColors[decision])} />
+      <div className="p-4">
+        <div className="mb-2.5 flex items-start justify-between gap-2">
+          <div className="grid size-10 place-items-center rounded-lg border border-[var(--cream-2)] bg-[var(--cream-2)] text-xs font-extrabold">
+            {name
+              .split(" ")
+              .map((p) => p[0])
+              .join("")
+              .slice(0, 2)
+              .toUpperCase()}
+          </div>
+          <Pill variant={pillVariant[decision]} className="text-[10px]">
+            {label}
+          </Pill>
+        </div>
+        <h3 className="font-serif text-lg font-bold">{name}</h3>
+        <p className="text-xs capitalize text-[var(--ink-faint)]">{meta}</p>
+        <div className="mt-3 flex items-center justify-between border-t border-dashed border-[var(--cream-2)] pt-3 text-[10px] font-medium text-[var(--ink-faint)]">
+          <span>{date}</span>
+          <a
+            href={pdfHref}
+            className="font-bold text-[var(--cyan-d)] no-underline hover:underline"
+          >
+            PDF ↓
+          </a>
+        </div>
       </div>
-      <strong className="block text-sm font-bold">{name}</strong>
-      <span className="text-[11px] leading-snug text-[var(--ink-faint)] whitespace-pre-line">
-        {meta}
-      </span>
-      <div className="mt-2.5 flex items-center justify-between border-t border-[var(--cream-2)] pt-2.5">
-        <Pill variant={pillVariant[decision]} className="text-[10px] px-2.5 py-1">
-          {label}
-        </Pill>
-        <Link
-          href={pdfHref}
-          className="text-[11px] font-bold text-[var(--cyan-d)] hover:underline"
-        >
-          PDF ↓
-        </Link>
-      </div>
-      <span className="mt-1 block text-[10px] font-semibold text-[var(--ink-faint)]">
-        {date}
-      </span>
     </article>
   );
 }

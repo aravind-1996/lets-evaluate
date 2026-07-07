@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { AuthFrame } from "@/components/AuthFrame";
 import { Button } from "@/components/Button";
-import { FaceAvatar } from "@/components/FaceAvatar";
+import { FieldInput, FieldLabel } from "@/components/FormField";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -33,50 +33,50 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--cream-2)] px-6 py-12">
-      <div className="w-full max-w-md text-center">
-        <FaceAvatar name={name || "You"} size="lg" className="mx-auto mb-4" />
-        <h1 className="font-serif text-3xl font-extrabold">Create your workspace</h1>
-        <form
-          onSubmit={onSubmit}
-          className="mt-8 space-y-4 rounded-[32px] bg-white p-8 text-left shadow-[0_8px_40px_rgba(41,41,41,.08)]"
-        >
-          <input
+    <AuthFrame activeTab="register">
+      <h1 className="font-serif text-2xl font-bold">Create account</h1>
+      <p className="mt-1 text-sm text-[var(--ink-faint)]">
+        Set up your team&apos;s evaluation workspace
+      </p>
+      <form onSubmit={onSubmit} className="mt-7 space-y-4">
+        <div>
+          <FieldLabel htmlFor="name">Full name</FieldLabel>
+          <FieldInput
+            id="name"
             required
-            placeholder="Full name"
+            placeholder="Priya Sharma"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-2xl border border-[var(--cream-2)] bg-[var(--cream)] px-4 py-3 text-sm"
           />
-          <input
+        </div>
+        <div>
+          <FieldLabel htmlFor="reg-email">Work email</FieldLabel>
+          <FieldInput
+            id="reg-email"
             required
             type="email"
             placeholder="you@kanini.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-2xl border border-[var(--cream-2)] bg-[var(--cream)] px-4 py-3 text-sm"
           />
-          <input
+        </div>
+        <div>
+          <FieldLabel htmlFor="reg-password">Password</FieldLabel>
+          <FieldInput
+            id="reg-password"
             required
             type="password"
             minLength={8}
             placeholder="Min. 8 characters"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-2xl border border-[var(--cream-2)] bg-[var(--cream)] px-4 py-3 text-sm"
           />
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
-            Create workspace
-          </Button>
-          <p className="text-center text-xs text-[var(--ink-faint)]">
-            Already have an account?{" "}
-            <Link href="/login" className="font-semibold text-[var(--cyan-d)]">
-              Sign in
-            </Link>
-          </p>
-        </form>
-      </div>
-    </main>
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <Button type="submit" className="mt-2 w-full" disabled={loading}>
+          {loading ? "Creating…" : "Create workspace →"}
+        </Button>
+      </form>
+    </AuthFrame>
   );
 }

@@ -3,8 +3,8 @@
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/Button";
+import { FieldInput, FieldLabel } from "@/components/FormField";
 
 export function LoginForm() {
   const router = useRouter();
@@ -36,39 +36,34 @@ export function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div>
-        <label className="mb-1.5 block text-xs font-semibold text-[var(--ink-soft)]">
-          Work email
-        </label>
-        <input
+        <FieldLabel htmlFor="email">Work email</FieldLabel>
+        <FieldInput
+          id="email"
           type="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-2xl border border-[var(--cream-2)] bg-[var(--cream)] px-4 py-3 text-sm focus:border-[var(--cyan)] focus:outline-none focus:ring-2 focus:ring-[var(--cyan-soft)]"
           placeholder="you@kanini.com"
+          autoComplete="email"
         />
       </div>
       <div>
-        <label className="mb-1.5 block text-xs font-semibold text-[var(--ink-soft)]">
-          Password
-        </label>
-        <input
+        <FieldLabel htmlFor="password">Password</FieldLabel>
+        <FieldInput
+          id="password"
           type="password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-2xl border border-[var(--cream-2)] bg-[var(--cream)] px-4 py-3 text-sm focus:border-[var(--cyan)] focus:outline-none"
+          autoComplete="current-password"
         />
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? "Signing in…" : "Enter workspace"}
+      <Button type="submit" className="mt-2 w-full" disabled={loading}>
+        {loading ? "Signing in…" : "Enter workspace →"}
       </Button>
       <p className="text-center text-xs text-[var(--ink-faint)]">
-        No account?{" "}
-        <Link href="/register" className="font-semibold text-[var(--cyan-d)]">
-          Create one
-        </Link>
+        Forgot password? Contact your admin
       </p>
       {process.env.NEXT_PUBLIC_AZURE_SSO_ENABLED === "true" && (
         <Button

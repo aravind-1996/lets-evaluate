@@ -1,10 +1,10 @@
 import { cn } from "@/lib/utils";
 
 const variants = {
-  cyan: "bg-[var(--cyan-soft)] text-[var(--cyan-d)]",
-  green: "bg-[var(--green-soft)] text-[var(--green)]",
-  orange: "bg-[var(--orange-soft)] text-[var(--orange)]",
-  neutral: "bg-[var(--cream-2)] text-[var(--ink-soft)]",
+  cyan: "border border-[var(--cyan)]/20 bg-[var(--cyan-soft)] text-[var(--cyan-d)]",
+  green: "border border-[var(--green)]/20 bg-[var(--green-soft)] text-[var(--green)]",
+  orange: "border border-[var(--orange)]/20 bg-[var(--orange-soft)] text-[var(--orange)]",
+  neutral: "border border-[var(--cream-2)] bg-[var(--cream-2)] text-[var(--ink-soft)]",
 } as const;
 
 type PillProps = {
