@@ -42,10 +42,19 @@ const screenSchema = z.object({
  * has to copy/paste the resume manually.
  */
 async function resolveResumeText(
-  candidate: { resumeStorageKey: string | null; resumeFilename: string | null },
+  candidate: {
+    resumeStorageKey: string | null;
+    resumeFilename: string | null;
+    resumeText?: string | null;
+  },
   bodyText?: string,
 ): Promise<string> {
   if (bodyText && bodyText.trim()) return bodyText;
+  // Persisted text is the source of truth: it survives ephemeral file storage
+  // and works across environments that share the same database.
+  if (candidate.resumeText && candidate.resumeText.trim()) {
+    return candidate.resumeText;
+  }
   if (candidate.resumeStorageKey && candidate.resumeFilename) {
     try {
       const buf = await readResume(candidate.resumeStorageKey);
@@ -107,6 +116,15 @@ export async function POST(req: Request, { params }: Params) {
         "No resume found. Re-upload the resume for this candidate.",
         400,
       );
+    }
+
+    // Backfill persisted text for legacy candidates so future analyses no
+    // longer depend on the (possibly ephemeral) stored file.
+    if (!candidate.resumeText?.trim()) {
+      await db
+        .update(candidates)
+        .set({ resumeText })
+        .where(eq(candidates.id, id));
     }
 
     const otherProjects = await db
@@ -289,6 +307,7 @@ export async function PUT(req: Request, { params }: Params) {
         roleId: roleId ?? existing.roleId,
         resumeStorageKey: resumeStorageKey ?? existing.resumeStorageKey,
         resumeFilename: resumeFilename ?? existing.resumeFilename,
+        resumeText: resumeText ?? existing.resumeText,
         updatedAt: new Date(),
       })
       .where(eq(candidates.id, id));
@@ -305,6 +324,7 @@ export async function PUT(req: Request, { params }: Params) {
     roleId,
     resumeStorageKey,
     resumeFilename: resumeFilename ?? "",
+    resumeText: resumeText ?? null,
     status: "draft",
     createdById: session.user.id,
   });

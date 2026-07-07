@@ -65,6 +65,10 @@ export default async function EvaluatePage({ params }: Params) {
       role={roleRow?.name ?? "Role"}
       projectName={projectRow?.name ?? undefined}
       resumeFilename={detail.candidate.resumeFilename ?? undefined}
+      hasResume={Boolean(
+        detail.candidate.resumeText?.trim() ||
+          detail.candidate.resumeStorageKey,
+      )}
       canScreen={canScreen && !detail.review}
       canReview={canReview && !!detail.assignments.length}
       initialMetrics={

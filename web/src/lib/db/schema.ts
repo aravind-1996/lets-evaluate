@@ -174,6 +174,7 @@ export const candidates = pgTable(
     email: text("email").default(""),
     resumeStorageKey: text("resume_storage_key"),
     resumeFilename: text("resume_filename").default(""),
+    resumeText: text("resume_text"),
     status: candidateStatusEnum("status").notNull().default("draft"),
     createdById: text("created_by_id")
       .notNull()

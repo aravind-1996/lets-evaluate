@@ -22,6 +22,7 @@ export function EvaluateClient({
   role,
   projectName,
   resumeFilename,
+  hasResume: initialHasResume,
   canScreen,
   canReview,
   initialMetrics,
@@ -34,6 +35,7 @@ export function EvaluateClient({
   role: string;
   projectName?: string;
   resumeFilename?: string;
+  hasResume: boolean;
   canScreen: boolean;
   canReview: boolean;
   initialMetrics?: Metrics;
@@ -65,6 +67,9 @@ export function EvaluateClient({
   const [assignTo, setAssignTo] = useState("");
   const [ratings, setRatings] = useState<Ratings>({});
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [resumeReady, setResumeReady] = useState(initialHasResume);
+  const [resumeName, setResumeName] = useState(resumeFilename);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (canScreen) {
@@ -94,6 +99,26 @@ export function EvaluateClient({
       }),
     });
     setSavedAt(Date.now());
+  }
+
+  async function uploadResume(file: File) {
+    setUploading(true);
+    setError(null);
+    const fd = new FormData();
+    fd.append("resume", file);
+    fd.append("name", candidateName);
+    const res = await fetch(`/api/candidates/${candidateId}`, {
+      method: "PUT",
+      body: fd,
+    });
+    const data = await res.json().catch(() => ({}));
+    setUploading(false);
+    if (!res.ok) {
+      setError(data?.error ?? "Could not upload the resume. Please try again.");
+      return;
+    }
+    setResumeName(file.name);
+    setResumeReady(true);
   }
 
   async function runAnalyze() {
@@ -170,7 +195,7 @@ export function EvaluateClient({
 
   const caseId = candidateId.slice(0, 8).toUpperCase();
   const score = metrics?.tech_match_score;
-  const hasResume = Boolean(resumeFilename);
+  const hasResume = resumeReady;
   const analyzed = Boolean(metrics?.tech_match_score);
   const questionsReady = standardQuestions.length > 0;
 
@@ -193,23 +218,20 @@ export function EvaluateClient({
     <div className="flex min-h-full flex-1 flex-col">
       <div className="flex items-center justify-between gap-3 bg-[var(--navy)] px-5 py-3.5 text-white md:px-6">
         <div className="min-w-0">
-          <div className="truncate font-serif text-[1.05rem] leading-tight text-white">
-            {candidateName}
+          <div className="font-serif text-[1.05rem] leading-tight text-white">
+            Candidate screening
           </div>
-          <div className="truncate text-[11px] text-white/50">{role}</div>
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <span className="case-label hidden text-white/50 sm:inline">
+          <div className="truncate text-[11px] text-white/50">
             Case #{caseId} · Draft
-          </span>
-          <button
-            type="button"
-            onClick={() => saveDraft(step)}
-            className="rounded-lg border border-white/30 bg-white/10 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/20"
-          >
-            {savedAt ? "Saved ✓" : "Save draft"}
-          </button>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={() => saveDraft(step)}
+          className="shrink-0 rounded-lg border border-white/30 bg-white/10 px-4 py-1.5 text-xs font-bold text-white transition-colors hover:bg-white/20"
+        >
+          {savedAt ? "Saved ✓" : "Save draft"}
+        </button>
       </div>
 
       {canScreen && (
@@ -246,8 +268,6 @@ export function EvaluateClient({
           <Pill variant="cyan" className="mb-4 text-[10px]">
             In review
           </Pill>
-          <MarginField label="Case ID" value={caseId} />
-          <MarginField label="Role" value={role} />
           {projectName && <MarginField label="Project" value={projectName} />}
           <MarginField label="Evidence" value={resumeFilename ?? "—"} />
           <MarginField
@@ -297,33 +317,75 @@ export function EvaluateClient({
               <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
                 We read the uploaded resume automatically — no copy/paste needed.
               </p>
-              <div className="mt-4 flex items-center gap-3 rounded-xl border border-[var(--cream-2)] bg-[var(--cream)] p-4">
+              <div
+                className={cn(
+                  "mt-4 flex items-center gap-3 rounded-xl border p-4",
+                  hasResume
+                    ? "border-[var(--cream-2)] bg-[var(--cream)]"
+                    : "border-[var(--orange)] bg-[var(--orange-soft)]",
+                )}
+              >
                 <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-[var(--ink)] text-white">
                   📄
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-bold">
-                    {resumeFilename ?? "No resume uploaded"}
+                    {resumeName || "No resume on file"}
                   </div>
                   <div className="text-xs text-[var(--ink-faint)]">
                     {hasResume
                       ? "Resume on file — ready to analyze"
-                      : "Upload a resume on the candidate to enable analysis"}
+                      : "Resume file is missing — upload it to enable analysis"}
                   </div>
                 </div>
-                {hasResume && <Pill variant="green">Ready</Pill>}
+                {hasResume ? (
+                  <Pill variant="green">Ready</Pill>
+                ) : (
+                  <Pill variant="orange">Missing</Pill>
+                )}
               </div>
-              <Button
-                className="mt-4"
-                onClick={runAnalyze}
-                disabled={loading || !hasResume}
-              >
-                {loading
-                  ? "Analyzing…"
-                  : analyzed
-                    ? "Re-evaluate the profile →"
-                    : "Analyze the candidate profile →"}
-              </Button>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Button
+                  onClick={runAnalyze}
+                  disabled={loading || uploading || !hasResume}
+                >
+                  {loading
+                    ? "Analyzing…"
+                    : analyzed
+                      ? "Re-evaluate the profile →"
+                      : "Analyze the candidate profile →"}
+                </Button>
+
+                <label
+                  className={cn(
+                    "inline-flex cursor-pointer items-center rounded-xl border border-[var(--cream-2)] bg-white px-4 py-2.5 text-sm font-bold text-[var(--ink)] transition-colors hover:border-[var(--cyan)] hover:bg-[var(--cream)]",
+                    uploading && "pointer-events-none opacity-50",
+                  )}
+                >
+                  {uploading
+                    ? "Uploading…"
+                    : hasResume
+                      ? "Replace resume"
+                      : "Upload resume"}
+                  <input
+                    type="file"
+                    accept=".pdf,.docx"
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadResume(file);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              {!hasResume && (
+                <p className="mt-2 text-xs text-[var(--ink-faint)]">
+                  Accepted formats: PDF or DOCX (max 10MB).
+                </p>
+              )}
             </section>
           )}
 
@@ -482,8 +544,10 @@ export function EvaluateClient({
           <Button
             variant="ghost"
             className="px-4 py-2 text-sm"
-            onClick={() => goToStep(Math.max(1, step - 1) as 1 | 2 | 3 | 4)}
-            disabled={step === 1}
+            onClick={() => {
+              if (step === 1) router.back();
+              else goToStep((step - 1) as 1 | 2 | 3 | 4);
+            }}
           >
             ← Back
           </Button>

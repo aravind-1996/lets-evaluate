@@ -90,6 +90,7 @@ export async function POST(req: Request) {
       roleId,
       resumeStorageKey,
       resumeFilename,
+      resumeText: resumeText ?? null,
       status: "draft",
       createdById: session.user.id,
     });
