@@ -301,7 +301,9 @@ export function EvaluateClient({
               <div className="text-[13px] text-[var(--ink-faint)]">{role}</div>
             </div>
             {metrics?.recommendation && (
-              <Pill variant="green">{metrics.recommendation}</Pill>
+              <Pill variant={recommendationVariant(metrics.recommendation)}>
+                AI: {metrics.recommendation}
+              </Pill>
             )}
           </div>
 
@@ -449,6 +451,32 @@ export function EvaluateClient({
           {canScreen && step === 4 && (
             <section className="case-card p-5 case-fade-in">
               <h2 className="font-serif text-xl font-bold">Record verdict</h2>
+              {metrics && (metrics.recommendation || metrics.suitability?.verdict) && (
+                <div className="mt-3 rounded-xl border border-[var(--cream-2)] bg-[var(--cream)] p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="case-label">AI advisory</span>
+                    {metrics.suitability?.verdict && (
+                      <Pill variant={suitabilityVariant(metrics.suitability.verdict)}>
+                        {metrics.suitability.verdict}
+                      </Pill>
+                    )}
+                    {metrics.recommendation && (
+                      <Pill variant={recommendationVariant(metrics.recommendation)}>
+                        {metrics.recommendation}
+                      </Pill>
+                    )}
+                    {score != null && (
+                      <span className="text-xs text-[var(--ink-faint)]">
+                        Tech match {score}%
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-[var(--ink-faint)]">
+                    The AI recommendation is advisory. You decide whether to
+                    proceed.
+                  </p>
+                </div>
+              )}
               <FieldTextarea
                 className="mt-4"
                 placeholder="Your screening notes…"
@@ -610,9 +638,9 @@ function AnalysisReport({
           }
         />
         <MetricCell
-          label="Recommendation"
+          label="AI recommendation"
           value={metrics.recommendation ?? "—"}
-          accent
+          accent={recommendationVariant(metrics.recommendation) === "green"}
         />
       </div>
 
@@ -683,19 +711,13 @@ function AnalysisReport({
         <div className="case-card border-[var(--orange)] bg-[var(--orange-soft)] p-5">
           <SectionTitle>Clarification required</SectionTitle>
           <p className="mt-1 text-xs text-[var(--ink-soft)]">
-            These skills are mentioned generically. Ask the candidate to
-            elaborate, then send the message manually via email for now.
+            These skills are mentioned generically. Review the gaps below, then
+            send the single combined message to the candidate via email for now.
           </p>
-          <div className="mt-3 space-y-3">
-            {clarifications.map((c) => (
-              <ClarificationCard
-                key={c.technology}
-                candidateName={candidateName}
-                technology={c.technology}
-                reason={c.reason}
-              />
-            ))}
-          </div>
+          <ClarificationBlock
+            candidateName={candidateName}
+            clarifications={clarifications}
+          />
         </div>
       )}
 
@@ -862,15 +884,22 @@ function AnalysisReport({
       {/* Suitability */}
       <div className="case-card border-[var(--cyan)] bg-[var(--cyan-soft)] p-5">
         <SectionTitle>Suitability for {roleLabel}</SectionTitle>
-        <div className="mt-2 flex items-center gap-2">
-          <Pill
-            variant={suitabilityVariant(metrics.suitability?.verdict)}
-          >
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Pill variant={suitabilityVariant(metrics.suitability?.verdict)}>
             {metrics.suitability?.verdict || "Review required"}
           </Pill>
+          {metrics.recommendation && (
+            <Pill variant={recommendationVariant(metrics.recommendation)}>
+              AI: {metrics.recommendation}
+            </Pill>
+          )}
         </div>
         <p className="mt-3 text-sm leading-relaxed">
           {metrics.suitability?.description || metrics.summary || "—"}
+        </p>
+        <p className="mt-3 text-xs text-[var(--ink-faint)]">
+          This is an AI advisory only. The recruiter makes the final Proceed /
+          Hold / Reject decision in the Verdict step.
         </p>
       </div>
 
@@ -895,17 +924,23 @@ function AnalysisReport({
   );
 }
 
-function ClarificationCard({
+function joinTechList(techs: string[]) {
+  if (techs.length <= 1) return techs[0] ?? "";
+  if (techs.length === 2) return `${techs[0]} and ${techs[1]}`;
+  return `${techs.slice(0, -1).join(", ")}, and ${techs[techs.length - 1]}`;
+}
+
+function ClarificationBlock({
   candidateName,
-  technology,
-  reason,
+  clarifications,
 }: {
   candidateName: string;
-  technology: string;
-  reason: string;
+  clarifications: { technology: string; reason: string }[];
 }) {
   const firstName = candidateName.split(" ")[0] || "there";
-  const defaultMessage = `Hi ${firstName},\n\nCould you please elaborate on the specific services and features you have worked on under ${technology} in real-time, production projects? A short note on the project context, your exact responsibilities, and how you applied ${technology} hands-on would help us evaluate your experience accurately.\n\nThank you!`;
+  const techs = clarifications.map((c) => c.technology);
+  const bulletList = techs.map((t) => `  • ${t}`).join("\n");
+  const defaultMessage = `Hi ${firstName},\n\nThank you for sharing your profile. Before we proceed, we'd like to understand your hands-on, real-time project experience with the following:\n\n${bulletList}\n\nFor each, a short note on the project context, your exact responsibilities, and how you applied it in production would help us evaluate your experience accurately.\n\nThank you!`;
   const [message, setMessage] = useState(defaultMessage);
   const [copied, setCopied] = useState(false);
 
@@ -920,16 +955,40 @@ function ClarificationCard({
   }
 
   return (
-    <div className="rounded-xl border border-[var(--cream-2)] bg-white p-4">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-bold">{technology}</span>
-        <Pill variant="orange">Clarify</Pill>
+    <div className="mt-3">
+      <div className="overflow-hidden rounded-xl border border-[var(--cream-2)] bg-white">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-[var(--cream)] text-left">
+              <Th>Technology</Th>
+              <Th>Why clarification is needed</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {clarifications.map((c) => (
+              <tr key={c.technology} className="border-t border-[var(--cream-2)]">
+                <Td>
+                  <span className="font-bold">{c.technology}</span>
+                </Td>
+                <Td>
+                  <span className="text-[var(--ink-faint)]">
+                    {c.reason || "Mentioned generically — confirm real-world usage."}
+                  </span>
+                </Td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      {reason && (
-        <p className="mt-1 text-xs text-[var(--ink-faint)]">{reason}</p>
-      )}
+
+      <p className="case-label mt-4">Message for the candidate</p>
+      <p className="mt-1 text-xs text-[var(--ink-faint)]">
+        One combined message covering {joinTechList(techs)}. Edit if needed, then
+        copy and send.
+      </p>
       <FieldTextarea
-        className="mt-3 text-sm"
+        className="mt-2 text-sm"
+        rows={9}
         value={message}
         onChange={(e) => setMessage(e.target.value)}
       />
@@ -938,7 +997,7 @@ function ClarificationCard({
         onClick={copy}
         className="mt-2 rounded-lg border border-[var(--cream-2)] bg-white px-3 py-1.5 text-xs font-bold text-[var(--ink)] transition-colors hover:border-[var(--cyan)] hover:bg-[var(--cream)]"
       >
-        {copied ? "Copied ✓" : "Copy message"}
+        {copied ? "Copied ✓" : "Copy message for recruiter"}
       </button>
     </div>
   );
@@ -979,6 +1038,14 @@ function suitabilityVariant(verdict?: string): "green" | "orange" | "neutral" {
   if (v.startsWith("suitable")) return "green";
   if (v.startsWith("partial")) return "orange";
   if (v.startsWith("not")) return "neutral";
+  return "neutral";
+}
+
+function recommendationVariant(rec?: string): "green" | "orange" | "neutral" {
+  const r = (rec ?? "").toLowerCase();
+  if (r.startsWith("proceed")) return "green";
+  if (r.startsWith("hold")) return "orange";
+  if (r.startsWith("reject")) return "neutral";
   return "neutral";
 }
 
