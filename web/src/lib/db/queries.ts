@@ -165,6 +165,39 @@ export async function getInterviewers(organizationId: string) {
     );
 }
 
+export async function getBookableCandidates(organizationId: string) {
+  return db
+    .select({
+      candidate: candidates,
+      metrics: screenings.metrics,
+      decision: screenings.decision,
+    })
+    .from(candidates)
+    .leftJoin(screenings, eq(screenings.candidateId, candidates.id))
+    .where(
+      and(
+        eq(candidates.organizationId, organizationId),
+        eq(candidates.status, "ready_for_interview"),
+      ),
+    )
+    .orderBy(desc(candidates.updatedAt));
+}
+
+export async function getOrgAssignments(organizationId: string) {
+  return db
+    .select({
+      assignment: interviewAssignments,
+      candidate: candidates,
+      assigneeName: users.name,
+      assigneeId: users.id,
+    })
+    .from(interviewAssignments)
+    .innerJoin(candidates, eq(interviewAssignments.candidateId, candidates.id))
+    .innerJoin(users, eq(interviewAssignments.assignedToId, users.id))
+    .where(eq(interviewAssignments.organizationId, organizationId))
+    .orderBy(desc(interviewAssignments.createdAt));
+}
+
 export async function getUserStats(
   organizationId: string,
   userId: string,

@@ -28,9 +28,15 @@ type Question = {
 
 const folderColors = ["bg-[var(--cyan)]", "bg-[var(--green)]", "bg-[var(--navy)]"];
 
-export function SetupClient({ projects }: { projects: Project[] }) {
+export function SetupClient({
+  projects,
+  initialTab = "projects",
+}: {
+  projects: Project[];
+  initialTab?: "projects" | "roles" | "questions";
+}) {
   const router = useRouter();
-  const [tab, setTab] = useState<"projects" | "roles" | "questions">("projects");
+  const [tab, setTab] = useState<"projects" | "roles" | "questions">(initialTab);
   const [name, setName] = useState("");
   const [stack, setStack] = useState("");
   const [roleName, setRoleName] = useState("");

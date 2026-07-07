@@ -4,7 +4,13 @@ import { signOut } from "next-auth/react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-export function LogoutButton({ className }: { className?: string }) {
+export function LogoutButton({
+  className,
+  compact = false,
+}: {
+  className?: string;
+  compact?: boolean;
+}) {
   const [loading, setLoading] = useState(false);
 
   async function handleLogout() {
@@ -16,6 +22,45 @@ export function LogoutButton({ className }: { className?: string }) {
     } catch {
       setLoading(false);
     }
+  }
+
+  if (compact) {
+    return (
+      <div className="group/nav relative">
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loading}
+          aria-label="Sign out"
+          title="Sign out"
+          className={cn(
+            "grid place-items-center rounded-lg text-[var(--ink-soft)] transition-colors hover:bg-white hover:text-red-600 disabled:opacity-50",
+            className,
+          )}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <path d="M16 17l5-5-5-5M21 12H9" />
+          </svg>
+        </button>
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute bottom-1/2 left-full z-50 ml-2 translate-y-1/2 whitespace-nowrap rounded-md bg-[var(--ink)] px-2.5 py-1.5 text-[12px] font-semibold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/nav:opacity-100"
+        >
+          {loading ? "Signing out…" : "Sign out"}
+        </span>
+      </div>
+    );
   }
 
   return (

@@ -11,6 +11,10 @@ const protectedPrefixes = [
   "/archive",
   "/assignments",
   "/pipeline",
+  "/openings",
+  "/candidates",
+  "/interviewers",
+  "/booking",
   "/api/",
 ];
 

@@ -48,6 +48,58 @@ export function TeamDashboard({
     ["screening", "ready_for_interview", "assigned", "draft"].includes(c.status),
   );
 
+  const needsScreening = candidates.filter((c) =>
+    ["draft", "screening"].includes(c.status),
+  );
+  const readyToBook = candidates.filter(
+    (c) => c.status === "ready_for_interview",
+  );
+  const awaitingResult = candidates.filter((c) =>
+    ["assigned", "interview_in_progress"].includes(c.status),
+  );
+  const onHold = candidates.filter((c) =>
+    ["hold", "screened_hold"].includes(c.status),
+  );
+
+  const actions = [
+    {
+      key: "screen",
+      count: needsScreening.length,
+      label: "Awaiting screening",
+      hint: "Run AI evaluation & decide",
+      href: "/candidates",
+      variant: "orange" as const,
+      cta: "Screen now",
+    },
+    {
+      key: "book",
+      count: readyToBook.length,
+      label: "Ready to book",
+      hint: "Assign an interviewer & slot",
+      href: "/booking",
+      variant: "cyan" as const,
+      cta: "Book slot",
+    },
+    {
+      key: "await",
+      count: awaitingResult.length,
+      label: "Awaiting interview result",
+      hint: "Follow up with panel",
+      href: "/pipeline",
+      variant: "neutral" as const,
+      cta: "Track",
+    },
+    {
+      key: "hold",
+      count: onHold.length,
+      label: "On hold",
+      hint: "Revisit paused candidates",
+      href: "/pipeline",
+      variant: "neutral" as const,
+      cta: "Review",
+    },
+  ];
+
   const title =
     role === "admin" ? "Admin dashboard" : "Talent acquisition dashboard";
   const subtitle =
@@ -80,6 +132,41 @@ export function TeamDashboard({
           </div>
         </div>
       )}
+
+      <section className="mb-5">
+        <h2 className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--ink-faint)]">
+          Action center
+        </h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {actions.map((a) => (
+            <Link
+              key={a.key}
+              href={a.href}
+              className="case-card group flex flex-col justify-between p-4 no-underline transition-colors hover:border-[var(--cyan)]"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-serif text-[2.25rem] leading-none">
+                  {a.count}
+                </span>
+                <Pill variant={a.count > 0 ? a.variant : "neutral"}>
+                  {a.count > 0 ? "Action" : "Clear"}
+                </Pill>
+              </div>
+              <div className="mt-2">
+                <div className="text-[13px] font-bold text-[var(--ink)]">
+                  {a.label}
+                </div>
+                <div className="mt-0.5 text-[11px] text-[var(--ink-faint)]">
+                  {a.hint}
+                </div>
+              </div>
+              <span className="mt-3 text-[12px] font-semibold text-[var(--cyan-d)] group-hover:underline">
+                {a.cta} →
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatBlock label="In progress" value={stats.inProgress} icon="📋" />

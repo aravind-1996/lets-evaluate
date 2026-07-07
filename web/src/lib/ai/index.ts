@@ -71,7 +71,14 @@ export async function analyzeResume(
     return emptyMetrics(projectTechStack, "OpenAI API key not configured");
   }
 
-  const prompt = `You are an expert technical recruiter. Analyse the following resume against the job requirements.
+  const prompt = `You are an expert technical recruiter performing a rigorous, evidence-based resume evaluation.
+
+STRICT GROUNDING RULES — follow exactly to avoid hallucination:
+1. Base EVERY statement only on facts explicitly present in the resume text below. Never invent employers, job titles, dates, degrees, certifications, or skills.
+2. If a piece of information is not present, use an empty string "", an empty array [], or "Not specified" — never guess.
+3. Only list a technology under matched_technologies if it is clearly evidenced in the resume. Otherwise it is missing.
+4. Derive total_experience_calculated only from dated roles in the resume; if dates are missing, return "Not specified".
+5. Be deterministic and consistent: identical input must always yield the same evaluation. Do not add creative embellishment.
 
 Resume:
 ${resumeText.slice(0, MAX_RESUME)}
@@ -83,13 +90,22 @@ ${roleRequirements.slice(0, MAX_ROLE)}
 
 Return ONLY a valid JSON object (no markdown) with keys: tech_match_score, experience_level, matched_technologies, missing_technologies, tech_comparison, strengths, concerns, recommendation, summary, certifications, career_history, total_experience_mentioned, total_experience_calculated, is_currently_employed, current_employer.
 
-tech_comparison MUST include ALL technologies from Required Tech Stack with status Matched or Unmatched.`;
+tech_comparison MUST include ALL technologies from Required Tech Stack with status Matched or Unmatched. recommendation MUST be one of: "Proceed", "Hold", "Reject", justified strictly by resume evidence against the requirements.`;
 
   try {
     const res = await openai.chat.completions.create({
       model: analysisModel(),
-      temperature: 0.3,
-      messages: [{ role: "user", content: prompt }],
+      temperature: 0,
+      seed: 7,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a meticulous technical recruiter. You never fabricate information and you produce deterministic, reproducible JSON evaluations grounded only in the provided resume.",
+        },
+        { role: "user", content: prompt },
+      ],
     });
     const raw = res.choices[0]?.message?.content ?? "{}";
     const result = parseJson<ResumeMetrics>(raw);
