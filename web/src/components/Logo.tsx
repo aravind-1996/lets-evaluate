@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useBrand } from "@/components/BrandContext";
+import { splitAppTitle } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 export function LogoMark({ className }: { className?: string }) {
@@ -41,9 +42,10 @@ export function Logo({
   className?: string;
 }) {
   const brand = useBrand();
-  const titlePrefix = brand.appTitleAccent
-    ? brand.appTitle.replace(brand.appTitleAccent, "").trimEnd()
-    : brand.appTitle;
+  const { prefix: titlePrefix, accent: titleAccent } = splitAppTitle(
+    brand.appTitle,
+    brand.appTitleAccent,
+  );
 
   return (
     <Link href={href} className={cn("flex items-center gap-3 no-underline", className)}>
@@ -63,10 +65,11 @@ export function Logo({
           light ? "text-white" : "text-[var(--ink)]",
         )}
       >
-        {brand.appTitleAccent ? (
+        {titleAccent ? (
           <>
-            {titlePrefix}{" "}
-            <em className="text-[var(--cyan-d)] not-italic">{brand.appTitleAccent}</em>
+            {titlePrefix}
+            {titlePrefix ? " " : ""}
+            <em className="text-[var(--cyan-d)] not-italic">{titleAccent}</em>
           </>
         ) : (
           brand.appTitle

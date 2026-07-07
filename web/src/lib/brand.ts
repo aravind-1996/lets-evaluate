@@ -20,28 +20,63 @@ const DEFAULT_COLORS = {
   white: "#ffffff",
 } as const;
 
+/** Valid CSS hex: #RGB, #RGBA, #RRGGBB, or #RRGGBBAA */
+const VALID_CSS_HEX =
+  /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+function isValidCssHex(value: string): boolean {
+  return VALID_CSS_HEX.test(value);
+}
+
 function readHex(envKey: string, fallback: string): string {
   const value = process.env[envKey]?.trim();
-  if (value && /^#[0-9a-fA-F]{3,8}$/.test(value)) return value;
+  if (value && isValidCssHex(value)) return value;
   return fallback;
 }
 
+function hexToRgb(hex: string): [number, number, number] {
+  let normalized = hex.replace("#", "");
+  if (normalized.length === 3 || normalized.length === 4) {
+    normalized = normalized
+      .slice(0, 3)
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  } else {
+    normalized = normalized.slice(0, 6);
+  }
+  return [
+    parseInt(normalized.slice(0, 2), 16),
+    parseInt(normalized.slice(2, 4), 16),
+    parseInt(normalized.slice(4, 6), 16),
+  ];
+}
+
 function mixWithWhite(hex: string, whiteRatio = 0.88): string {
-  const normalized = hex.replace("#", "");
-  const full =
-    normalized.length === 3
-      ? normalized
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : normalized.slice(0, 6);
-  const r = parseInt(full.slice(0, 2), 16);
-  const g = parseInt(full.slice(2, 4), 16);
-  const b = parseInt(full.slice(4, 6), 16);
+  const [r, g, b] = hexToRgb(hex);
   const mix = (channel: number) =>
     Math.round(channel * (1 - whiteRatio) + 255 * whiteRatio);
   const toHex = (n: number) => n.toString(16).padStart(2, "0");
   return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
+}
+
+/**
+ * Split app title when accent is a trailing segment (e.g. "Let's Evaluate" + "Evaluate").
+ * Falls back to the full title when accent is not a suffix — avoids broken spacing.
+ */
+export function splitAppTitle(
+  appTitle: string,
+  accent: string,
+): { prefix: string; accent: string | null } {
+  const trimmedAccent = accent.trim();
+  if (!trimmedAccent) {
+    return { prefix: appTitle.trim(), accent: null };
+  }
+  if (appTitle.endsWith(trimmedAccent)) {
+    const prefix = appTitle.slice(0, -trimmedAccent.length).trim();
+    return { prefix, accent: trimmedAccent };
+  }
+  return { prefix: appTitle.trim(), accent: null };
 }
 
 export type BrandColors = {

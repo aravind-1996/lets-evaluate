@@ -4,15 +4,42 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { FaceAvatar } from "@/components/FaceAvatar";
+import { LogoutButton } from "@/components/LogoutButton";
+import { canManageSetup } from "@/lib/auth/capabilities";
+import type { MemberRole } from "@/lib/auth/config";
 import { cn } from "@/lib/utils";
 
-const drawers = [
-  { href: "/people", label: "Dashboard", icon: "▦" },
-  { href: "/assignments", label: "Assignments", icon: "◎" },
-  { href: "/evaluate", label: "Evaluate", icon: "?" },
-  { href: "/setup", label: "Projects", icon: "📁" },
-  { href: "/archive", label: "Archives", icon: "▤" },
-];
+type NavItem = { href: string; label: string; icon: string };
+
+function navForRole(role: MemberRole): NavItem[] {
+  const base: NavItem[] = [
+    { href: "/people", label: "Dashboard", icon: "▦" },
+    { href: "/assignments", label: "Assignments", icon: "◎" },
+    { href: "/evaluate", label: "Evaluate", icon: "?" },
+    { href: "/archive", label: "Archives", icon: "▤" },
+  ];
+
+  if (canManageSetup(role)) {
+    base.splice(3, 0, { href: "/setup", label: "Projects", icon: "📁" });
+  }
+
+  return base;
+}
+
+function mobileNavForRole(role: MemberRole) {
+  const items = [
+    { href: "/people", label: "Home" },
+    { href: "/assignments", label: "Assign" },
+    { href: "/evaluate/new", label: "+", accent: true as const },
+    { href: "/archive", label: "Archive" },
+  ];
+
+  if (canManageSetup(role)) {
+    items.splice(3, 0, { href: "/setup", label: "Setup" });
+  }
+
+  return items;
+}
 
 export function CabinetShell({
   userName,
@@ -20,12 +47,13 @@ export function CabinetShell({
   children,
 }: {
   userName: string;
-  userRole: string;
+  userRole: MemberRole;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const isEvaluateFocus =
     pathname.startsWith("/evaluate/") && !pathname.endsWith("/new");
+  const drawers = navForRole(userRole);
 
   return (
     <div className="min-h-screen bg-[var(--cream)] pb-20 md:pb-6 md:pt-6">
@@ -68,35 +96,50 @@ export function CabinetShell({
               );
             })}
           </nav>
-          <div className="flex items-center gap-2.5 border-t border-[var(--cream-2)] p-4">
-            <FaceAvatar name={userName} size="sm" />
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-bold">{userName}</div>
-              <div className="truncate text-[11px] capitalize text-[var(--ink-faint)]">
-                {userRole.replace(/_/g, " ")}
+          <div className="border-t border-[var(--cream-2)] p-4">
+            <div className="mb-2 flex items-center gap-2.5">
+              <FaceAvatar name={userName} size="sm" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-bold">{userName}</div>
+                <div className="truncate text-[11px] capitalize text-[var(--ink-faint)]">
+                  {userRole.replace(/_/g, " ")}
+                </div>
               </div>
             </div>
+            <LogoutButton />
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col bg-white md:rounded-r-xl">
+          <div className="flex items-center justify-between border-b border-[var(--cream-2)] px-4 py-3 md:hidden">
+            <div className="flex min-w-0 items-center gap-2">
+              <FaceAvatar name={userName} size="sm" />
+              <div className="min-w-0">
+                <div className="truncate text-[13px] font-bold">{userName}</div>
+                <div className="truncate text-[11px] capitalize text-[var(--ink-faint)]">
+                  {userRole}
+                </div>
+              </div>
+            </div>
+            <LogoutButton className="!w-auto shrink-0 rounded-full px-3 py-1.5 text-[11px]" />
+          </div>
           {children}
         </div>
       </div>
 
-      <MobileNav pathname={pathname} />
+      <MobileNav pathname={pathname} role={userRole} />
     </div>
   );
 }
 
-function MobileNav({ pathname }: { pathname: string }) {
-  const items = [
-    { href: "/people", label: "Home" },
-    { href: "/assignments", label: "Assign" },
-    { href: "/evaluate/new", label: "+", accent: true },
-    { href: "/setup", label: "Setup" },
-    { href: "/archive", label: "Archive" },
-  ];
+function MobileNav({
+  pathname,
+  role,
+}: {
+  pathname: string;
+  role: MemberRole;
+}) {
+  const items = mobileNavForRole(role);
 
   return (
     <nav
@@ -104,7 +147,9 @@ function MobileNav({ pathname }: { pathname: string }) {
       aria-label="Mobile navigation"
     >
       {items.map(({ href, label, accent }) => {
-        const on = pathname === href || (href !== "/people" && pathname.startsWith(href.replace("/new", "")));
+        const on =
+          pathname === href ||
+          (href !== "/people" && pathname.startsWith(href.replace("/new", "")));
         if (accent) {
           return (
             <Link
@@ -123,7 +168,9 @@ function MobileNav({ pathname }: { pathname: string }) {
             href={href}
             className={cn(
               "rounded-full px-3 py-2 text-[10px] font-bold",
-              on ? "bg-[var(--cyan-soft)] text-[var(--cyan-d)]" : "text-[var(--ink-faint)]",
+              on
+                ? "bg-[var(--cyan-soft)] text-[var(--cyan-d)]"
+                : "text-[var(--ink-faint)]",
             )}
           >
             {label}

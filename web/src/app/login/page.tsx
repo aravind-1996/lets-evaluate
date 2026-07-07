@@ -10,11 +10,11 @@ export default function LoginPage() {
     <AuthFrame activeTab="signin">
       <h1 className="font-serif text-2xl font-bold">Welcome back</h1>
       <p className="mt-1 text-sm text-[var(--ink-faint)]">
-        Sign in to access your case files
+        Sign in with your work username
       </p>
       <div className="mt-7">
         <Suspense fallback={<p className="text-sm">Loading…</p>}>
-          <LoginForm emailPlaceholder={brand.emailPlaceholder} />
+          <LoginForm emailDomain={brand.emailDomain} />
         </Suspense>
       </div>
     </AuthFrame>

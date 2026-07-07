@@ -4,16 +4,45 @@ import type { NextRequest } from "next/server";
 
 const publicPaths = ["/", "/login", "/register", "/api/auth", "/api/register"];
 
+const protectedPrefixes = [
+  "/people",
+  "/evaluate",
+  "/setup",
+  "/archive",
+  "/assignments",
+  "/pipeline",
+  "/api/",
+];
+
+function isPublicPath(pathname: string) {
+  return publicPaths.some(
+    (p) =>
+      pathname === p ||
+      pathname.startsWith(p + "/") ||
+      pathname.startsWith("/api/auth"),
+  );
+}
+
+function isProtectedPath(pathname: string) {
+  return protectedPrefixes.some((p) => pathname.startsWith(p));
+}
+
+function withSecurityHeaders(response: NextResponse, noStore = false) {
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (noStore) {
+    response.headers.set(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, private",
+    );
+    response.headers.set("Pragma", "no-cache");
+  }
+  return response;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  if (
-    publicPaths.some(
-      (p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith("/api/auth"),
-    )
-  ) {
-    return NextResponse.next();
-  }
 
   if (
     pathname.startsWith("/_next") ||
@@ -24,14 +53,19 @@ export async function middleware(request: NextRequest) {
   }
 
   const session = await auth();
-  const isApp =
-    pathname.startsWith("/people") ||
-    pathname.startsWith("/evaluate") ||
-    pathname.startsWith("/setup") ||
-    pathname.startsWith("/archive") ||
-    pathname.startsWith("/assignments") ||
-    pathname.startsWith("/pipeline") ||
-    pathname.startsWith("/api/");
+
+  if (
+    session?.user?.id &&
+    (pathname === "/login" || pathname === "/register")
+  ) {
+    return NextResponse.redirect(new URL("/people", request.url));
+  }
+
+  if (isPublicPath(pathname)) {
+    return withSecurityHeaders(NextResponse.next());
+  }
+
+  const isApp = isProtectedPath(pathname);
 
   if (isApp && !session?.user?.id) {
     if (pathname.startsWith("/api/")) {
@@ -42,11 +76,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(login);
   }
 
-  const response = NextResponse.next();
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  return response;
+  return withSecurityHeaders(NextResponse.next(), isApp && !!session?.user?.id);
 }
 
 export const config = {

@@ -10,7 +10,7 @@ import { v4 as uuid } from "uuid";
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
-import { z } from "zod";
+import { normalizeLoginCredentials } from "@/lib/auth/validation";
 
 export type MemberRole = "admin" | "ta" | "interviewer";
 
@@ -67,34 +67,29 @@ async function resolveMembership(userId: string) {
   return rows[0] ?? null;
 }
 
-const credentialsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
-
 const providers: NextAuthConfig["providers"] = [
   Credentials({
     name: "credentials",
     credentials: {
-      email: { label: "Email", type: "email" },
+      email: { label: "Username or email", type: "text" },
       password: { label: "Password", type: "password" },
     },
     async authorize(credentials) {
-      const parsed = credentialsSchema.safeParse(credentials);
-      if (!parsed.success) return null;
+      const parsed = normalizeLoginCredentials({
+        email: credentials?.email as string | undefined,
+        password: credentials?.password as string | undefined,
+      });
+      if (!parsed.ok) return null;
 
       const [user] = await db
         .select()
         .from(users)
-        .where(eq(users.email, parsed.data.email.toLowerCase()))
+        .where(eq(users.email, parsed.email))
         .limit(1);
 
       if (!user?.passwordHash) return null;
 
-      const ok = await bcrypt.compare(
-        parsed.data.password,
-        user.passwordHash,
-      );
+      const ok = await bcrypt.compare(parsed.password, user.passwordHash);
       if (!ok) return null;
 
       const membership = await resolveMembership(user.id);

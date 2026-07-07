@@ -5,60 +5,103 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/Button";
 import { FieldInput, FieldLabel } from "@/components/FormField";
+import { UsernameField } from "@/components/UsernameField";
+import {
+  buildEmail,
+  validateUsername,
+} from "@/lib/auth/validation";
 
-export function LoginForm({ emailPlaceholder }: { emailPlaceholder: string }) {
+export function LoginForm({ emailDomain }: { emailDomain: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const callbackUrl = params.get("callbackUrl") ?? "/people";
-  const [email, setEmail] = useState("");
+  const registered = params.get("registered") === "1";
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{
+    username?: string;
+    password?: string;
+  }>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  function validate(): boolean {
+    const errors: typeof fieldErrors = {};
+    const usernameError = validateUsername(username);
+    if (usernameError) errors.username = usernameError;
+    if (!password.trim()) errors.password = "Password is required";
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError("");
+    if (!validate()) return;
+
+    setLoading(true);
+    const email = buildEmail(username, emailDomain);
+
     const res = await signIn("credentials", {
       email,
       password,
       redirect: false,
     });
     setLoading(false);
+
     if (res?.error) {
-      setError("Invalid email or password");
+      setError("Invalid username or password. Please check your credentials and try again.");
       return;
     }
-    router.push(callbackUrl);
+
+    router.replace(callbackUrl);
     router.refresh();
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div>
-        <FieldLabel htmlFor="email">Work email</FieldLabel>
-        <FieldInput
-          id="email"
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder={emailPlaceholder}
-          autoComplete="email"
-        />
-      </div>
+    <form onSubmit={onSubmit} className="space-y-4" noValidate>
+      {registered && (
+        <p className="rounded-lg bg-[var(--green-soft)] px-3 py-2 text-sm text-[var(--green)]">
+          Account created successfully. Sign in with your username and password.
+        </p>
+      )}
+      <UsernameField
+        id="username"
+        value={username}
+        onChange={(v) => {
+          setUsername(v);
+          if (fieldErrors.username) setFieldErrors((e) => ({ ...e, username: undefined }));
+        }}
+        emailDomain={emailDomain}
+        error={fieldErrors.username}
+        autoComplete="username"
+      />
       <div>
         <FieldLabel htmlFor="password">Password</FieldLabel>
         <FieldInput
           id="password"
           type="password"
-          required
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            if (fieldErrors.password)
+              setFieldErrors((err) => ({ ...err, password: undefined }));
+          }}
           autoComplete="current-password"
+          aria-invalid={!!fieldErrors.password}
+          className={fieldErrors.password ? "border-red-400" : undefined}
         />
+        {fieldErrors.password && (
+          <p className="mt-1.5 text-sm text-red-600" role="alert">
+            {fieldErrors.password}
+          </p>
+        )}
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          {error}
+        </p>
+      )}
       <Button type="submit" className="mt-2 w-full" disabled={loading}>
         {loading ? "Signing in…" : "Enter workspace →"}
       </Button>

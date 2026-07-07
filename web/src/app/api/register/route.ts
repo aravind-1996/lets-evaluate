@@ -9,22 +9,23 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { v4 as uuid } from "uuid";
 import { z } from "zod";
-
-const schema = z.object({
-  name: z.string().min(2),
-  email: z.string().email(),
-  password: z.string().min(8),
-});
+import {
+  buildEmail,
+  formatZodError,
+  getEmailDomain,
+  registerBodySchema,
+} from "@/lib/auth/validation";
 
 export async function POST(req: Request) {
   try {
-    const body = schema.parse(await req.json());
-    const email = body.email.toLowerCase();
+    const body = registerBodySchema.parse(await req.json());
+    const domain = getEmailDomain();
+    const email = buildEmail(body.username, domain);
 
-    const domain = process.env.ALLOWED_EMAIL_DOMAIN;
-    if (domain && !email.endsWith(`@${domain}`)) {
+    const domainCheck = process.env.ALLOWED_EMAIL_DOMAIN;
+    if (domainCheck && !email.endsWith(`@${domainCheck.toLowerCase()}`)) {
       return NextResponse.json(
-        { error: `Registration restricted to @${domain} emails` },
+        { error: `Accounts must use an @${domainCheck} email address` },
         { status: 403 },
       );
     }
@@ -35,7 +36,10 @@ export async function POST(req: Request) {
       .where(eq(users.email, email))
       .limit(1);
     if (existing) {
-      return NextResponse.json({ error: "Email already registered" }, { status: 409 });
+      return NextResponse.json(
+        { error: "An account with this username already exists" },
+        { status: 409 },
+      );
     }
 
     const orgSlug = process.env.ORG_SLUG ?? "kanini";
@@ -52,7 +56,12 @@ export async function POST(req: Request) {
         name: process.env.ORG_NAME ?? "KANINI",
         slug: orgSlug,
       });
-      org = { id: orgId, name: process.env.ORG_NAME ?? "KANINI", slug: orgSlug, createdAt: new Date() };
+      org = {
+        id: orgId,
+        name: process.env.ORG_NAME ?? "KANINI",
+        slug: orgSlug,
+        createdAt: new Date(),
+      };
     }
 
     const userId = uuid();
@@ -60,7 +69,7 @@ export async function POST(req: Request) {
 
     await db.insert(users).values({
       id: userId,
-      name: body.name,
+      name: body.name.trim(),
       email,
       passwordHash,
     });
@@ -69,14 +78,17 @@ export async function POST(req: Request) {
       id: uuid(),
       organizationId: org.id,
       userId,
-      role: "ta",
+      role: body.role,
     });
 
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return NextResponse.json({ error: e.message }, { status: 400 });
+      return NextResponse.json({ error: formatZodError(e) }, { status: 400 });
     }
-    return NextResponse.json({ error: "Registration failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Registration failed. Please try again later." },
+      { status: 500 },
+    );
   }
 }

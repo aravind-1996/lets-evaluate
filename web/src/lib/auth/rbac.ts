@@ -2,6 +2,13 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import type { MemberRole } from "@/lib/auth/config";
 
+export {
+  canViewAllCandidates,
+  canAssignInterviewers,
+  canManageSetup,
+  isTeamLead,
+} from "@/lib/auth/capabilities";
+
 export async function requireSession() {
   const session = await auth();
   if (!session?.user?.id || !session.user.organizationId) {
@@ -16,16 +23,4 @@ export async function requireRole(allowed: MemberRole[]) {
     redirect("/people");
   }
   return session;
-}
-
-export function canViewAllCandidates(role: MemberRole) {
-  return role === "admin" || role === "ta";
-}
-
-export function canAssignInterviewers(role: MemberRole) {
-  return role === "admin" || role === "ta";
-}
-
-export function canManageSetup(role: MemberRole) {
-  return role === "admin" || role === "ta";
 }
