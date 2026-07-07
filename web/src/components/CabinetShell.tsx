@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { Logo, LogoMark } from "@/components/Logo";
 import { FaceAvatar } from "@/components/FaceAvatar";
@@ -29,8 +29,6 @@ type NavItem = {
   href: string;
   label: string;
   icon: IconType;
-  /** Optional query key that must match for this item to be "active". */
-  matchTab?: string;
 };
 
 type NavSection = { label?: string; items: NavItem[] };
@@ -55,18 +53,8 @@ function navForRole(role: MemberRole): NavSection[] {
     {
       label: "Configuration",
       items: [
-        {
-          href: "/setup?tab=projects",
-          label: "Projects",
-          icon: ProjectsIcon,
-          matchTab: "projects",
-        },
-        {
-          href: "/setup?tab=roles",
-          label: "Roles",
-          icon: RolesIcon,
-          matchTab: "roles",
-        },
+        { href: "/setup/projects", label: "Projects", icon: ProjectsIcon },
+        { href: "/setup/roles", label: "Roles", icon: RolesIcon },
         { href: "/openings", label: "Openings", icon: OpeningsIcon },
       ],
     },
@@ -138,8 +126,6 @@ export function CabinetShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const activeTab = searchParams.get("tab");
 
   const collapsed = useSyncExternalStore(
     (l) => collapseStore.subscribe(l),
@@ -157,14 +143,10 @@ export function CabinetShell({
 
   function isActive(item: NavItem) {
     const path = item.href.split("?")[0];
-    if (item.matchTab) {
-      if (pathname !== path) return false;
-      // No tab in the URL means the page renders its default ("projects") tab,
-      // so highlight that item rather than leaving all sub-items inactive.
-      if (!activeTab) return item.matchTab === "projects";
-      return activeTab === item.matchTab;
-    }
     if (path === "/people") return pathname === "/people";
+    if (path === "/setup/projects") {
+      return pathname === "/setup/projects" || pathname === "/setup";
+    }
     return pathname === path || pathname.startsWith(`${path}/`);
   }
 
@@ -178,7 +160,7 @@ export function CabinetShell({
       >
         <aside
           className={cn(
-            "hidden shrink-0 flex-col border-b border-[var(--cream-2)] bg-[var(--cream-2)] transition-[width] duration-200 ease-out md:flex md:h-full md:rounded-l-xl md:border-b-0 md:border-r",
+            "hidden shrink-0 flex-col overflow-x-clip border-b border-[var(--cream-2)] bg-[var(--cream-2)] transition-[width] duration-200 ease-out md:flex md:h-full md:rounded-l-xl md:border-b-0 md:border-r",
             collapsed ? "md:w-[74px]" : "md:w-[236px]",
           )}
         >
@@ -223,7 +205,7 @@ export function CabinetShell({
           )}
 
           <nav
-            className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 py-2"
+            className="cabinet-nav flex min-h-0 flex-1 flex-col gap-1 overflow-x-clip overflow-y-auto px-2 py-2"
             aria-label="App navigation"
           >
             {sections.map((section, si) => (
@@ -240,41 +222,32 @@ export function CabinetShell({
                   const on = isActive(item);
                   const Icon = item.icon;
                   return (
-                    <div key={item.href} className="group/nav relative">
-                      <Link
-                        href={item.href}
-                        title={collapsed ? item.label : undefined}
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={collapsed ? item.label : undefined}
+                      className={cn(
+                        "flex items-center rounded-lg text-[13px] font-semibold transition-colors",
+                        collapsed
+                          ? "justify-center px-2 py-2.5"
+                          : "gap-3 px-3 py-2.5",
+                        on
+                          ? "bg-white text-[var(--ink)] shadow-[inset_3px_0_0_var(--cyan)]"
+                          : "text-[var(--ink-soft)] hover:bg-white/60 hover:text-[var(--ink)]",
+                      )}
+                    >
+                      <span
                         className={cn(
-                          "flex items-center rounded-lg text-[13px] font-semibold transition-colors",
-                          collapsed
-                            ? "justify-center px-2 py-2.5"
-                            : "gap-3 px-3 py-2.5",
+                          "grid size-8 shrink-0 place-items-center rounded-lg border transition-colors",
                           on
-                            ? "bg-white text-[var(--ink)] shadow-[inset_3px_0_0_var(--cyan)]"
-                            : "text-[var(--ink-soft)] hover:bg-white/60 hover:text-[var(--ink)]",
+                            ? "border-[var(--cyan)] bg-[var(--cyan-soft)] text-[var(--cyan-d)]"
+                            : "border-[var(--cream-2)] bg-white/40 text-[var(--ink-soft)]",
                         )}
                       >
-                        <span
-                          className={cn(
-                            "grid size-8 shrink-0 place-items-center rounded-lg border transition-colors",
-                            on
-                              ? "border-[var(--cyan)] bg-[var(--cyan-soft)] text-[var(--cyan-d)]"
-                              : "border-[var(--cream-2)] bg-white/40 text-[var(--ink-soft)]",
-                          )}
-                        >
-                          <Icon className="size-[18px]" />
-                        </span>
-                        {!collapsed && <span className="truncate">{item.label}</span>}
-                      </Link>
-                      {collapsed && (
-                        <span
-                          role="tooltip"
-                          className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-[var(--ink)] px-2.5 py-1.5 text-[12px] font-semibold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/nav:opacity-100"
-                        >
-                          {item.label}
-                        </span>
-                      )}
-                    </div>
+                        <Icon className="size-[18px]" />
+                      </span>
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </Link>
                   );
                 })}
               </div>
@@ -289,17 +262,9 @@ export function CabinetShell({
           >
             {collapsed ? (
               <>
-                <div className="group/nav relative">
-                  <span title={userName}>
-                    <FaceAvatar name={userName} size="sm" />
-                  </span>
-                  <span
-                    role="tooltip"
-                    className="pointer-events-none absolute bottom-1/2 left-full z-50 ml-2 translate-y-1/2 whitespace-nowrap rounded-md bg-[var(--ink)] px-2.5 py-1.5 text-[12px] font-semibold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/nav:opacity-100"
-                  >
-                    {userName} · {userRole.replace(/_/g, " ")}
-                  </span>
-                </div>
+                <span title={userName}>
+                  <FaceAvatar name={userName} size="sm" />
+                </span>
                 <LogoutButton
                   compact
                   className="grid size-9 place-items-center rounded-lg p-0"

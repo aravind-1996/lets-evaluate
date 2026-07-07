@@ -11,6 +11,7 @@ type Params = { params: Promise<{ id: string }> };
 const updateSchema = z.object({
   name: z.string().min(1),
   projectId: z.string().optional(),
+  projectIds: z.array(z.string()).optional(),
   level: z.string().optional(),
   requirements: z.string().optional(),
 });
@@ -23,15 +24,20 @@ export async function PUT(req: Request, { params }: Params) {
 
   const { id } = await params;
   const body = updateSchema.parse(await req.json());
+  const projectIds = Array.from(
+    new Set(
+      (body.projectIds ?? (body.projectId ? [body.projectId] : [])).filter(Boolean),
+    ),
+  );
 
   await db
     .update(roles)
     .set({
       name: body.name,
-      projectId: body.projectId || null,
+      projectId: projectIds[0] ?? null,
       level: body.level ?? "",
       requirements: body.requirements ?? "",
-      projectIds: body.projectId ? [body.projectId] : [],
+      projectIds,
     })
     .where(
       and(

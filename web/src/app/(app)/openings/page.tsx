@@ -33,7 +33,7 @@ export default async function OpeningsPage() {
       title="Openings"
       subtitle={`${totalOpenings} open role${totalOpenings !== 1 ? "s" : ""} across ${projects.length} project${projects.length !== 1 ? "s" : ""}`}
       actions={
-        <ButtonLink href="/setup?tab=roles" className="px-5 py-2 text-[13px]">
+        <ButtonLink href="/setup/roles" className="px-5 py-2 text-[13px]">
           + Add opening
         </ButtonLink>
       }
@@ -41,7 +41,7 @@ export default async function OpeningsPage() {
       {projects.length === 0 ? (
         <CaseCard className="p-6 text-sm text-[var(--ink-faint)]">
           No projects yet. Create a project first in{" "}
-          <Link href="/setup?tab=projects" className="font-semibold text-[var(--cyan-d)]">
+          <Link href="/setup/projects" className="font-semibold text-[var(--cyan-d)]">
             Configuration → Projects
           </Link>
           .

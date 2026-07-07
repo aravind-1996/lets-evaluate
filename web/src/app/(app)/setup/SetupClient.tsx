@@ -19,30 +19,74 @@ type Role = {
   level: string | null;
   requirements: string | null;
   projectId: string | null;
+  projectIds: string[] | null;
 };
 
-type Tab = "projects" | "roles";
 type ViewMode = "grid" | "list";
 
-const folderColors = ["bg-[var(--cyan)]", "bg-[var(--green)]", "bg-[var(--navy)]"];
+const accentColors = [
+  "border-l-[var(--cyan)]",
+  "border-l-[var(--green)]",
+  "border-l-[#7c6fe0]",
+  "border-l-[var(--orange,#e67e22)]",
+];
 
-export function SetupClient({
-  projects: initialProjects,
-  initialTab = "projects",
-}: {
-  projects: Project[];
-  initialTab?: Tab;
-}) {
+export function ProjectsClient({ projects: initialProjects }: { projects: Project[] }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>(initialTab);
   const [view, setView] = useState<ViewMode>("grid");
-
   const [projects, setProjects] = useState<Project[]>(initialProjects);
-  const [roles, setRoles] = useState<Role[]>([]);
 
   useEffect(() => {
     setProjects(initialProjects);
   }, [initialProjects]);
+
+  async function refreshProjects() {
+    const r = await fetch("/api/projects");
+    if (r.ok) setProjects(await r.json());
+    router.refresh();
+  }
+
+  return (
+    <CabinetPage
+      title="Projects"
+      subtitle="Configure hiring context once — reuse everywhere"
+      bodyClassName="p-5 md:p-6"
+    >
+      <SetupLayout
+        form={<ProjectCreateForm onChanged={refreshProjects} />}
+        count={projects.length}
+        label={projects.length === 1 ? "project" : "projects"}
+        view={view}
+        onViewChange={setView}
+      >
+        {projects.length === 0 ? (
+          <EmptyState label="No projects yet — create your first one on the left." />
+        ) : view === "grid" ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {projects.map((p, i) => (
+              <ProjectCard key={p.id} project={p} colorIndex={i} onChanged={refreshProjects} />
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-[var(--cream-2)] bg-white shadow-sm">
+            {projects.map((p, i) => (
+              <ProjectRow
+                key={p.id}
+                project={p}
+                last={i === projects.length - 1}
+                onChanged={refreshProjects}
+              />
+            ))}
+          </div>
+        )}
+      </SetupLayout>
+    </CabinetPage>
+  );
+}
+
+export function RolesClient({ projects }: { projects: Project[] }) {
+  const [view, setView] = useState<ViewMode>("grid");
+  const [roles, setRoles] = useState<Role[]>([]);
 
   useEffect(() => {
     fetch("/api/roles")
@@ -51,74 +95,94 @@ export function SetupClient({
       .catch(() => {});
   }, []);
 
-  async function refreshProjects() {
-    const r = await fetch("/api/projects");
-    if (r.ok) setProjects(await r.json());
-    router.refresh();
-  }
-
   async function refreshRoles() {
     const r = await fetch("/api/roles");
     if (r.ok) setRoles(await r.json());
   }
 
-  const projectName = (id: string | null) =>
-    projects.find((p) => p.id === id)?.name ?? null;
+  const projectNames = (role: Role) => {
+    const ids = role.projectIds?.length ? role.projectIds : role.projectId ? [role.projectId] : [];
+    return ids
+      .map((id) => projects.find((p) => p.id === id)?.name)
+      .filter(Boolean) as string[];
+  };
 
   return (
     <CabinetPage
-      title="Project files"
-      subtitle="Configure hiring context once — reuse everywhere"
+      title="Roles"
+      subtitle="Define positions and requirements for your hiring pipeline"
+      bodyClassName="p-5 md:p-6"
     >
-      <div className="case-banner mb-5">
-        <div className="grid size-14 shrink-0 place-items-center rounded-xl bg-[var(--cyan)] text-white text-xl font-bold">
-          +
-        </div>
-        <div>
-          <h2 className="font-serif text-xl font-bold">Configure once, evaluate forever</h2>
-          <p className="mt-1 text-[13px] text-white/65">
-            Set up your projects and roles here — reuse them across every evaluation
-          </p>
-        </div>
-      </div>
-
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--cream-2)] pb-4">
-        <div className="flex gap-2">
-          {(["projects", "roles"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={cn(
-                "rounded-full px-4 py-2 text-xs font-bold capitalize transition-colors",
-                tab === t
-                  ? "bg-[var(--cyan)] text-white"
-                  : "bg-white text-[var(--ink-soft)] hover:bg-[var(--cream-2)]",
-              )}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-        <ViewToggle view={view} onChange={setView} />
-      </div>
-
-      {tab === "projects" ? (
-        <ProjectsTab
-          view={view}
-          projects={projects}
-          onChanged={refreshProjects}
-        />
-      ) : (
-        <RolesTab
-          view={view}
-          roles={roles}
-          projects={projects}
-          projectName={projectName}
-          onChanged={refreshRoles}
-        />
-      )}
+      <SetupLayout
+        form={<RoleCreateForm projects={projects} onChanged={refreshRoles} />}
+        count={roles.length}
+        label={roles.length === 1 ? "role" : "roles"}
+        view={view}
+        onViewChange={setView}
+      >
+        {roles.length === 0 ? (
+          <EmptyState label="No roles yet — create your first one on the left." />
+        ) : view === "grid" ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {roles.map((r) => (
+              <RoleCard
+                key={r.id}
+                role={r}
+                projects={projects}
+                projectNames={projectNames(r)}
+                onChanged={refreshRoles}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-[var(--cream-2)] bg-white shadow-sm">
+            {roles.map((r, i) => (
+              <RoleRow
+                key={r.id}
+                role={r}
+                projects={projects}
+                projectNames={projectNames(r)}
+                last={i === roles.length - 1}
+                onChanged={refreshRoles}
+              />
+            ))}
+          </div>
+        )}
+      </SetupLayout>
     </CabinetPage>
+  );
+}
+
+/* --------------------------------- Layout --------------------------------- */
+
+function SetupLayout({
+  form,
+  count,
+  label,
+  view,
+  onViewChange,
+  children,
+}: {
+  form: React.ReactNode;
+  count: number;
+  label: string;
+  view: ViewMode;
+  onViewChange: (v: ViewMode) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid items-start gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+      <div className="lg:sticky lg:top-0">{form}</div>
+      <section className="min-w-0">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--ink-faint)]">
+            {count} {label}
+          </h3>
+          <ViewToggle view={view} onChange={onViewChange} />
+        </div>
+        {children}
+      </section>
+    </div>
   );
 }
 
@@ -130,7 +194,7 @@ function ViewToggle({
   onChange: (v: ViewMode) => void;
 }) {
   return (
-    <div className="inline-flex rounded-full border border-[var(--cream-2)] bg-white p-0.5">
+    <div className="inline-flex shrink-0 rounded-lg border border-[var(--cream-2)] bg-white p-0.5 shadow-sm">
       {(["grid", "list"] as const).map((v) => (
         <button
           key={v}
@@ -139,7 +203,7 @@ function ViewToggle({
           aria-pressed={view === v}
           title={v === "grid" ? "Tiles" : "List"}
           className={cn(
-            "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold capitalize transition-colors",
+            "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-bold capitalize transition-colors",
             view === v
               ? "bg-[var(--cyan-soft)] text-[var(--cyan-d)]"
               : "text-[var(--ink-faint)] hover:text-[var(--ink)]",
@@ -153,64 +217,7 @@ function ViewToggle({
   );
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-3 mt-8 flex items-center gap-3">
-      <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--ink-faint)]">
-        {children}
-      </h3>
-      <div className="h-px flex-1 bg-[var(--cream-2)]" />
-    </div>
-  );
-}
-
 /* ---------------------------------- Projects --------------------------------- */
-
-function ProjectsTab({
-  view,
-  projects,
-  onChanged,
-}: {
-  view: ViewMode;
-  projects: Project[];
-  onChanged: () => void | Promise<void>;
-}) {
-  return (
-    <div>
-      <ProjectCreateForm onChanged={onChanged} />
-
-      <SectionHeading>
-        {projects.length} {projects.length === 1 ? "project" : "projects"}
-      </SectionHeading>
-
-      {projects.length === 0 ? (
-        <EmptyState label="No projects yet — create your first one above." />
-      ) : view === "grid" ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((p, i) => (
-            <ProjectCard
-              key={p.id}
-              project={p}
-              colorIndex={i}
-              onChanged={onChanged}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-[var(--cream-2)] bg-white">
-          {projects.map((p, i) => (
-            <ProjectRow
-              key={p.id}
-              project={p}
-              last={i === projects.length - 1}
-              onChanged={onChanged}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function ProjectCreateForm({ onChanged }: { onChanged: () => void | Promise<void> }) {
   const [name, setName] = useState("");
@@ -234,14 +241,12 @@ function ProjectCreateForm({ onChanged }: { onChanged: () => void | Promise<void
   }
 
   return (
-    <div className="case-card p-5 md:p-6">
-      <div className="flex items-center gap-2">
-        <span className="grid size-7 place-items-center rounded-lg bg-[var(--cyan-soft)] text-[var(--cyan-d)] text-sm font-bold">
-          +
-        </span>
-        <h3 className="font-bold">Create a project</h3>
-      </div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+    <FormShell
+      icon={<ProjectsGlyph className="size-4" />}
+      title="New project"
+      description="Name the context and list the technologies you evaluate against."
+    >
+      <div className="space-y-3">
         <div>
           <FieldLabel>Project name</FieldLabel>
           <FieldInput
@@ -260,11 +265,11 @@ function ProjectCreateForm({ onChanged }: { onChanged: () => void | Promise<void
         </div>
       </div>
       <div className="mt-4">
-        <Button onClick={save} disabled={loading || !name}>
+        <Button onClick={save} disabled={loading || !name} className="w-full">
           {loading ? "Saving…" : "Create project"}
         </Button>
       </div>
-    </div>
+    </FormShell>
   );
 }
 
@@ -282,7 +287,7 @@ function ProjectCard({
 
   if (editing) {
     return (
-      <div className="case-card p-5">
+      <div className="rounded-xl border border-[var(--cream-2)] bg-white p-4 shadow-sm sm:col-span-2 xl:col-span-3">
         <ProjectEditForm
           project={project}
           onClose={() => setEditing(false)}
@@ -296,30 +301,30 @@ function ProjectCard({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="case-card case-card-hover group overflow-hidden text-left"
+      className={cn(
+        "group flex h-full flex-col rounded-xl border border-[var(--cream-2)] border-l-4 bg-white p-4 text-left shadow-sm transition-all hover:border-[var(--cyan)] hover:shadow-md",
+        accentColors[colorIndex % accentColors.length],
+      )}
     >
-      <div className={cn("case-folder-tab", folderColors[colorIndex % folderColors.length])} />
-      <div className="border-t border-[var(--cream-2)] p-5 pt-6">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-serif text-lg font-bold">{project.name}</h3>
-          <span className="shrink-0 rounded-full bg-[var(--cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--ink-faint)] opacity-0 transition-opacity group-hover:opacity-100">
-            Edit
-          </span>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {tags.length ? (
-            tags.map((tag) => (
-              <span
-                key={tag}
-                className="rounded border border-[var(--cream-2)] bg-[var(--cream)] px-2 py-0.5 text-[10px] font-semibold"
-              >
-                {tag}
-              </span>
-            ))
-          ) : (
-            <span className="text-xs text-[var(--ink-faint)]">No tech stack configured</span>
-          )}
-        </div>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="font-serif text-base font-bold">{project.name}</h3>
+        <span className="shrink-0 rounded-md bg-[var(--cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--ink-faint)] opacity-0 transition-opacity group-hover:opacity-100">
+          Edit
+        </span>
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        {tags.length ? (
+          tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-md bg-[var(--cream)] px-2 py-0.5 text-[10px] font-semibold text-[var(--ink-soft)]"
+            >
+              {tag}
+            </span>
+          ))
+        ) : (
+          <span className="text-xs text-[var(--ink-faint)]">No tech stack configured</span>
+        )}
       </div>
     </button>
   );
@@ -339,7 +344,7 @@ function ProjectRow({
 
   if (editing) {
     return (
-      <div className={cn("p-5", !last && "border-b border-[var(--cream-2)]")}>
+      <div className={cn("p-4", !last && "border-b border-[var(--cream-2)]")}>
         <ProjectEditForm
           project={project}
           onClose={() => setEditing(false)}
@@ -354,17 +359,22 @@ function ProjectRow({
       type="button"
       onClick={() => setEditing(true)}
       className={cn(
-        "flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-[var(--cream)]",
+        "group flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-[var(--cream)]/60",
         !last && "border-b border-[var(--cream-2)]",
       )}
     >
+      <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--cyan-soft)] text-[var(--cyan-d)]">
+        <ProjectsGlyph className="size-4" />
+      </div>
       <div className="min-w-0 flex-1">
-        <div className="font-bold">{project.name}</div>
+        <div className="font-semibold text-[var(--ink)]">{project.name}</div>
         <div className="mt-0.5 truncate text-xs text-[var(--ink-faint)]">
           {tags.join(" · ") || "No tech stack configured"}
         </div>
       </div>
-      <span className="shrink-0 text-xs font-bold text-[var(--cyan-d)]">Edit</span>
+      <span className="shrink-0 text-xs font-bold text-[var(--cyan-d)] opacity-0 transition-opacity group-hover:opacity-100">
+        Edit
+      </span>
     </button>
   );
 }
@@ -411,17 +421,19 @@ function ProjectEditForm({
       <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--cyan-d)]">
         Editing project
       </div>
-      <div>
-        <FieldLabel>Project name</FieldLabel>
-        <FieldInput value={name} onChange={(e) => setName(e.target.value)} />
-      </div>
-      <div className="mt-3">
-        <FieldLabel>Tech stack</FieldLabel>
-        <FieldInput
-          value={stack}
-          onChange={(e) => setStack(e.target.value)}
-          placeholder="Comma-separated"
-        />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <FieldLabel>Project name</FieldLabel>
+          <FieldInput value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div>
+          <FieldLabel>Tech stack</FieldLabel>
+          <FieldInput
+            value={stack}
+            onChange={(e) => setStack(e.target.value)}
+            placeholder="Comma-separated"
+          />
+        </div>
       </div>
       <EditActions loading={loading} disabled={!name} onSave={save} onCancel={onClose} onDelete={remove} />
     </div>
@@ -429,59 +441,6 @@ function ProjectEditForm({
 }
 
 /* ----------------------------------- Roles ----------------------------------- */
-
-function RolesTab({
-  view,
-  roles,
-  projects,
-  projectName,
-  onChanged,
-}: {
-  view: ViewMode;
-  roles: Role[];
-  projects: Project[];
-  projectName: (id: string | null) => string | null;
-  onChanged: () => void | Promise<void>;
-}) {
-  return (
-    <div>
-      <RoleCreateForm projects={projects} onChanged={onChanged} />
-
-      <SectionHeading>
-        {roles.length} {roles.length === 1 ? "role" : "roles"}
-      </SectionHeading>
-
-      {roles.length === 0 ? (
-        <EmptyState label="No roles yet — create your first one above." />
-      ) : view === "grid" ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {roles.map((r) => (
-            <RoleCard
-              key={r.id}
-              role={r}
-              projects={projects}
-              projectName={projectName}
-              onChanged={onChanged}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-[var(--cream-2)] bg-white">
-          {roles.map((r, i) => (
-            <RoleRow
-              key={r.id}
-              role={r}
-              projects={projects}
-              projectName={projectName}
-              last={i === roles.length - 1}
-              onChanged={onChanged}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function RoleCreateForm({
   projects,
@@ -492,7 +451,7 @@ function RoleCreateForm({
 }) {
   const [name, setName] = useState("");
   const [level, setLevel] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [projectIds, setProjectIds] = useState<string[]>([]);
   const [requirements, setRequirements] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -504,27 +463,25 @@ function RoleCreateForm({
       body: JSON.stringify({
         name,
         level: level || undefined,
-        projectId: projectId || undefined,
+        projectIds,
         requirements,
       }),
     });
     setLoading(false);
     setName("");
     setLevel("");
-    setProjectId("");
+    setProjectIds([]);
     setRequirements("");
     await onChanged();
   }
 
   return (
-    <div className="case-card p-5 md:p-6">
-      <div className="flex items-center gap-2">
-        <span className="grid size-7 place-items-center rounded-lg bg-[var(--cyan-soft)] text-[var(--cyan-d)] text-sm font-bold">
-          +
-        </span>
-        <h3 className="font-bold">Create a role</h3>
-      </div>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+    <FormShell
+      icon={<RolesGlyph className="size-4" />}
+      title="New role"
+      description="Capture the position, seniority, and skills you screen for."
+    >
+      <div className="space-y-3">
         <div>
           <FieldLabel>Role name</FieldLabel>
           <FieldInput
@@ -535,24 +492,16 @@ function RoleCreateForm({
         </div>
         <div>
           <FieldLabel>Level</FieldLabel>
-          <FieldInput
-            value={level}
-            onChange={(e) => setLevel(e.target.value)}
-            placeholder="e.g. Senior (optional)"
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <FieldLabel>Project</FieldLabel>
-          <FieldSelect value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">Link to project (optional)</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
+          <FieldSelect value={level} onChange={(e) => setLevel(e.target.value)}>
+            {LEVEL_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </FieldSelect>
         </div>
-        <div className="sm:col-span-2">
+        <ProjectPicker projects={projects} selected={projectIds} onChange={setProjectIds} />
+        <div>
           <FieldLabel>Requirements</FieldLabel>
           <FieldTextarea
             value={requirements}
@@ -562,31 +511,30 @@ function RoleCreateForm({
         </div>
       </div>
       <div className="mt-4">
-        <Button onClick={save} disabled={loading || !name}>
+        <Button onClick={save} disabled={loading || !name} className="w-full">
           {loading ? "Saving…" : "Create role"}
         </Button>
       </div>
-    </div>
+    </FormShell>
   );
 }
 
 function RoleCard({
   role,
   projects,
-  projectName,
+  projectNames,
   onChanged,
 }: {
   role: Role;
   projects: Project[];
-  projectName: (id: string | null) => string | null;
+  projectNames: string[];
   onChanged: () => void | Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
-  const linked = projectName(role.projectId);
 
   if (editing) {
     return (
-      <div className="case-card p-5">
+      <div className="rounded-xl border border-[var(--cream-2)] bg-white p-4 shadow-sm sm:col-span-2 xl:col-span-3">
         <RoleEditForm
           role={role}
           projects={projects}
@@ -601,26 +549,35 @@ function RoleCard({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="case-card case-card-hover group p-5 text-left"
+      className="group flex h-full flex-col rounded-xl border border-[var(--cream-2)] border-l-4 border-l-[var(--green)] bg-white p-4 text-left shadow-sm transition-all hover:border-[var(--cyan)] hover:shadow-md"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="font-bold">{role.name}</h3>
           {role.level && (
-            <span className="mt-1 inline-block rounded-full bg-[var(--cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--ink-soft)]">
+            <span className="mt-1 inline-block rounded-md bg-[var(--cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--ink-soft)]">
               {role.level}
             </span>
           )}
         </div>
-        <span className="shrink-0 rounded-full bg-[var(--cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--ink-faint)] opacity-0 transition-opacity group-hover:opacity-100">
+        <span className="shrink-0 rounded-md bg-[var(--cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--ink-faint)] opacity-0 transition-opacity group-hover:opacity-100">
           Edit
         </span>
       </div>
-      <p className="mt-2 line-clamp-3 text-xs text-[var(--ink-faint)]">
+      <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-[var(--ink-faint)]">
         {role.requirements || "No requirements"}
       </p>
-      {linked && (
-        <p className="mt-3 text-[11px] font-semibold text-[var(--cyan-d)]">{linked}</p>
+      {projectNames.length > 0 && (
+        <div className="mt-auto flex flex-wrap gap-1.5 pt-3">
+          {projectNames.map((n) => (
+            <span
+              key={n}
+              className="rounded-md bg-[var(--cyan-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--cyan-d)]"
+            >
+              {n}
+            </span>
+          ))}
+        </div>
       )}
     </button>
   );
@@ -629,22 +586,21 @@ function RoleCard({
 function RoleRow({
   role,
   projects,
-  projectName,
+  projectNames,
   last,
   onChanged,
 }: {
   role: Role;
   projects: Project[];
-  projectName: (id: string | null) => string | null;
+  projectNames: string[];
   last: boolean;
   onChanged: () => void | Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
-  const linked = projectName(role.projectId);
 
   if (editing) {
     return (
-      <div className={cn("p-5", !last && "border-b border-[var(--cream-2)]")}>
+      <div className={cn("p-4", !last && "border-b border-[var(--cream-2)]")}>
         <RoleEditForm
           role={role}
           projects={projects}
@@ -660,27 +616,37 @@ function RoleRow({
       type="button"
       onClick={() => setEditing(true)}
       className={cn(
-        "flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-[var(--cream)]",
+        "group flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-[var(--cream)]/60",
         !last && "border-b border-[var(--cream-2)]",
       )}
     >
+      <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--green)]/15 text-[var(--green)]">
+        <RolesGlyph className="size-4" />
+      </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="font-bold">{role.name}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold text-[var(--ink)]">{role.name}</span>
           {role.level && (
-            <span className="rounded-full bg-[var(--cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--ink-soft)]">
+            <span className="rounded-md bg-[var(--cream)] px-2 py-0.5 text-[10px] font-bold text-[var(--ink-soft)]">
               {role.level}
             </span>
           )}
-          {linked && (
-            <span className="text-[11px] font-semibold text-[var(--cyan-d)]">· {linked}</span>
-          )}
+          {projectNames.map((n) => (
+            <span
+              key={n}
+              className="rounded-md bg-[var(--cyan-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--cyan-d)]"
+            >
+              {n}
+            </span>
+          ))}
         </div>
         <div className="mt-0.5 truncate text-xs text-[var(--ink-faint)]">
           {role.requirements || "No requirements"}
         </div>
       </div>
-      <span className="shrink-0 text-xs font-bold text-[var(--cyan-d)]">Edit</span>
+      <span className="shrink-0 text-xs font-bold text-[var(--cyan-d)] opacity-0 transition-opacity group-hover:opacity-100">
+        Edit
+      </span>
     </button>
   );
 }
@@ -698,7 +664,9 @@ function RoleEditForm({
 }) {
   const [name, setName] = useState(role.name);
   const [level, setLevel] = useState(role.level ?? "");
-  const [projectId, setProjectId] = useState(role.projectId ?? "");
+  const [projectIds, setProjectIds] = useState<string[]>(
+    role.projectIds?.length ? role.projectIds : role.projectId ? [role.projectId] : [],
+  );
   const [requirements, setRequirements] = useState(role.requirements ?? "");
   const [loading, setLoading] = useState(false);
 
@@ -710,7 +678,7 @@ function RoleEditForm({
       body: JSON.stringify({
         name,
         level: level || undefined,
-        projectId: projectId || undefined,
+        projectIds,
         requirements,
       }),
     });
@@ -740,23 +708,17 @@ function RoleEditForm({
         </div>
         <div>
           <FieldLabel>Level</FieldLabel>
-          <FieldInput
-            value={level}
-            onChange={(e) => setLevel(e.target.value)}
-            placeholder="Optional"
-          />
+          <FieldSelect value={level} onChange={(e) => setLevel(e.target.value)}>
+            {LEVEL_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </FieldSelect>
         </div>
       </div>
       <div className="mt-3">
-        <FieldLabel>Project</FieldLabel>
-        <FieldSelect value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-          <option value="">Link to project (optional)</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </FieldSelect>
+        <ProjectPicker projects={projects} selected={projectIds} onChange={setProjectIds} />
       </div>
       <div className="mt-3">
         <FieldLabel>Requirements</FieldLabel>
@@ -771,6 +733,95 @@ function RoleEditForm({
 }
 
 /* --------------------------------- Shared UI --------------------------------- */
+
+const LEVEL_OPTIONS = [
+  { value: "", label: "Any level (optional)" },
+  { value: "Intern", label: "Intern" },
+  { value: "Junior", label: "Junior" },
+  { value: "Mid", label: "Mid" },
+  { value: "Senior", label: "Senior" },
+  { value: "Lead", label: "Lead" },
+  { value: "Principal", label: "Principal" },
+  { value: "Manager", label: "Manager" },
+];
+
+function FormShell({
+  icon,
+  title,
+  description,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--cream-2)] bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-start gap-3">
+        <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--cyan-soft)] text-[var(--cyan-d)]">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold text-[var(--ink)]">{title}</h3>
+          <p className="mt-0.5 text-xs leading-relaxed text-[var(--ink-faint)]">{description}</p>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ProjectPicker({
+  projects,
+  selected,
+  onChange,
+}: {
+  projects: Project[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  function toggle(id: string) {
+    onChange(selected.includes(id) ? selected.filter((s) => s !== id) : [...selected, id]);
+  }
+
+  return (
+    <div>
+      <FieldLabel>Projects</FieldLabel>
+      {projects.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-[var(--cream-2)] px-3 py-2.5 text-xs text-[var(--ink-faint)]">
+          No projects yet — create one first to link roles.
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {projects.map((p) => {
+            const on = selected.includes(p.id);
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => toggle(p.id)}
+                aria-pressed={on}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                  on
+                    ? "border-[var(--cyan)] bg-[var(--cyan-soft)] text-[var(--cyan-d)]"
+                    : "border-[var(--cream-2)] bg-white text-[var(--ink-soft)] hover:border-[var(--cyan)]",
+                )}
+              >
+                {on ? "✓ " : ""}
+                {p.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <p className="mt-1.5 text-[11px] text-[var(--ink-faint)]">
+        Select one or more projects this role applies to.
+      </p>
+    </div>
+  );
+}
 
 function EditActions({
   loading,
@@ -809,9 +860,41 @@ function EditActions({
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="rounded-xl border-2 border-dashed border-[var(--cream-2)] px-6 py-12 text-center text-sm text-[var(--ink-faint)]">
+    <div className="rounded-xl border border-dashed border-[var(--cream-2)] bg-white/50 px-6 py-12 text-center text-sm text-[var(--ink-faint)]">
       {label}
     </div>
+  );
+}
+
+function ProjectsGlyph({ className }: { className?: string }) {
+  return (
+    <svg className={className ?? "size-5"} viewBox="0 0 20 20" fill="none" aria-hidden>
+      <rect x="2" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="11" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="2" y="12" width="7" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="11" y="12" width="7" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function RolesGlyph({ className }: { className?: string }) {
+  return (
+    <svg className={className ?? "size-5"} viewBox="0 0 20 20" fill="none" aria-hidden>
+      <circle cx="7" cy="6" r="3" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M2 17c0-2.8 2.2-5 5-5s5 2.2 5 5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <circle cx="14" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M11 17c.3-2 1.8-3.5 3.5-3.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 

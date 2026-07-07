@@ -238,3 +238,29 @@ body {
     transform: none;
   }
 }
+
+.cabinet-nav {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.cabinet-nav:hover {
+  scrollbar-color: rgba(41, 41, 41, 0.15) transparent;
+}
+
+.cabinet-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.cabinet-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cabinet-nav::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.cabinet-nav:hover::-webkit-scrollbar-thumb {
+  background: rgba(41, 41, 41, 0.15);
+}

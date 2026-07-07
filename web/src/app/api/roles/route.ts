@@ -19,9 +19,15 @@ export async function GET(req: Request) {
 const schema = z.object({
   name: z.string().min(1),
   projectId: z.string().optional(),
+  projectIds: z.array(z.string()).optional(),
   level: z.string().optional(),
   requirements: z.string().optional(),
 });
+
+function normalizeProjectIds(body: z.infer<typeof schema>): string[] {
+  const ids = body.projectIds ?? (body.projectId ? [body.projectId] : []);
+  return Array.from(new Set(ids.filter(Boolean)));
+}
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -30,15 +36,16 @@ export async function POST(req: Request) {
   if (forbidden) return forbidden;
 
   const body = schema.parse(await req.json());
+  const projectIds = normalizeProjectIds(body);
   const id = uuid();
   await db.insert(roles).values({
     id,
     organizationId: session.user.organizationId,
     name: body.name,
-    projectId: body.projectId,
+    projectId: projectIds[0] ?? null,
     level: body.level ?? "",
     requirements: body.requirements ?? "",
-    projectIds: body.projectId ? [body.projectId] : [],
+    projectIds,
   });
   return NextResponse.json({ id });
 }
